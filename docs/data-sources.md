@@ -40,11 +40,13 @@
 
 - Official endpoint: `https://www.wikidata.org/w/api.php`
 - Usage: read-only entity search and metadata lookup during normalization
-- Planned stored fields: entity ID, labels, aliases, descriptions, selected instance-of metadata,
-  source timestamp, raw response hash and bytes
+- Stored fields: entity ID, labels, aliases, descriptions, complete returned instance-of metadata,
+  acquisition timestamp, exact request URL, raw response hash and bytes, and attempt-to-fetch FKs
 - Access guidance: identifying User-Agent, sequential calls, timeout and bounded retry/backoff
 - Limitations: search rank is never sufficient for automatic merge; ambiguous or conflicting matches
   become `NEEDS_REVIEW`
+- Replay never calls live Wikidata. It uses the selected entity recorded by successful historical
+  live resolution attempts.
 
 ## Explicitly disabled sources
 

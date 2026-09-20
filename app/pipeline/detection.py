@@ -170,16 +170,68 @@ class TrendDetector:
         entity = self._session.get(TrendEntity, entity_id)
         if entity is None or entity.resolution_status is not ResolutionStatus.RESOLVED:
             return None
-        existing = self._session.scalar(
-            select(TrendSnapshot).where(
-                TrendSnapshot.entity_id == entity_id,
-                TrendSnapshot.as_of == as_of,
-                TrendSnapshot.score_version == self._score_version,
-            )
+        return self._snapshot(
+            entity_id,
+            as_of,
+            pipeline_run_id=pipeline_run_id,
+            candidate_ids=None,
+            minimum_timestamp=None,
+            persist=True,
         )
-        if existing is not None:
-            return existing
-        points = self._points(entity_id, as_of)
+
+    def replay_snapshot(
+        self,
+        entity_id: int,
+        candidate_ids: tuple[int, ...],
+        as_of: datetime,
+        *,
+        from_: datetime,
+        pipeline_run_id: int,
+        persist: bool,
+    ) -> TrendSnapshot | None:
+        if (
+            as_of.tzinfo is None
+            or as_of.utcoffset() is None
+            or as_of.utcoffset().total_seconds() != 0
+        ):
+            raise ValueError("as_of must be aware UTC")
+        if not candidate_ids or self._session.get(TrendEntity, entity_id) is None:
+            return None
+        return self._snapshot(
+            entity_id,
+            as_of,
+            pipeline_run_id=pipeline_run_id,
+            candidate_ids=candidate_ids,
+            minimum_timestamp=from_,
+            persist=persist,
+        )
+
+    def _snapshot(
+        self,
+        entity_id: int,
+        as_of: datetime,
+        *,
+        pipeline_run_id: int,
+        candidate_ids: tuple[int, ...] | None,
+        minimum_timestamp: datetime | None,
+        persist: bool,
+    ) -> TrendSnapshot | None:
+        if persist:
+            existing = self._session.scalar(
+                select(TrendSnapshot).where(
+                    TrendSnapshot.entity_id == entity_id,
+                    TrendSnapshot.as_of == as_of,
+                    TrendSnapshot.score_version == self._score_version,
+                )
+            )
+            if existing is not None:
+                return existing
+        points = self._points(
+            entity_id,
+            as_of,
+            candidate_ids=candidate_ids,
+            minimum_timestamp=minimum_timestamp,
+        )
         features = FeatureExtractor().extract(points, as_of)
         score = ExplainableScorer().score(
             features.signal, missing_inputs=features.missing_inputs
@@ -245,6 +297,8 @@ class TrendDetector:
             score_version=self._score_version,
             system_detected_at=self._now().astimezone(UTC),
         )
+        if not persist:
+            return snapshot
         try:
             with self._session.begin_nested():
                 self._session.add(snapshot)
@@ -262,23 +316,40 @@ class TrendDetector:
                 raise
             return existing
 
-    def _points(self, entity_id: int, as_of: datetime) -> list[SignalPoint]:
-        rows = self._session.execute(
+    def _points(
+        self,
+        entity_id: int,
+        as_of: datetime,
+        *,
+        candidate_ids: tuple[int, ...] | None = None,
+        minimum_timestamp: datetime | None = None,
+    ) -> list[SignalPoint]:
+        statement = (
             select(SourceObservation, TrendCandidate.id, TrendCandidate.normalized_text)
             .join(
                 CandidateObservation,
                 CandidateObservation.observation_id == SourceObservation.id,
             )
             .join(TrendCandidate, TrendCandidate.id == CandidateObservation.candidate_id)
-            .join(EntityCandidate, EntityCandidate.candidate_id == TrendCandidate.id)
             .where(
-                EntityCandidate.entity_id == entity_id,
                 SourceObservation.source_timestamp <= as_of,
                 SourceObservation.observed_at <= as_of,
                 SourceObservation.source_timestamp >= as_of - BASELINE_LOOKBACK,
             )
             .order_by(SourceObservation.source_timestamp, SourceObservation.id)
         )
+        if candidate_ids is None:
+            statement = statement.join(
+                EntityCandidate, EntityCandidate.candidate_id == TrendCandidate.id
+            ).where(EntityCandidate.entity_id == entity_id)
+        else:
+            statement = statement.where(TrendCandidate.id.in_(candidate_ids))
+        if minimum_timestamp is not None:
+            statement = statement.where(
+                SourceObservation.source_timestamp >= minimum_timestamp,
+                SourceObservation.observed_at >= minimum_timestamp,
+            )
+        rows = self._session.execute(statement)
         return [
             _to_point(observation, candidate_id, normalized_text)
             for observation, candidate_id, normalized_text in rows

@@ -303,3 +303,30 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
   observations and seven unique candidates, but zero trend entities or approved cards; unavailable
   quality, cross-source, freshness, and cost-per-card denominators rendered as `N/A`. Week 01
   correctly counted one complete official-collection day rather than seven empty calendar days.
+
+### Phase 8 — Replay, scheduler, end-to-end operations (implementation complete 2026-09-21)
+
+- Added cutoff-safe replay using immutable successful live resolution attempts rather than mutable
+  current entity links. Date-only ranges cover complete UTC days; both source and acquisition times
+  must be inside the range. Dry-run is write-free, while persisted runs retain `REPLAY` identity,
+  exact versions, derived snapshots, and a canonical digest.
+- A future-observation/current-relink regression produced the same dry-run digest. Persisted replay
+  refuses to reuse a snapshot owned by another run and requires a new score version.
+- Added a single-process Asia/Seoul scheduler with stable job IDs, hourly Google collection, delayed
+  daily Wikimedia collection, pipeline ordering, daily/weekly reports, coalescing, one-instance jobs,
+  independent source failures, and waiting shutdown. Docker scheduler startup succeeded.
+- Fixture and fresh PostgreSQL end-to-end tests exercised official parsers, raw persistence,
+  normalization, classification, scoring, evidence summary, approval, human evaluation, and report
+  rendering in one flow. The PostgreSQL fixture database migrated `0001 -> 0008`, passed, rolled back
+  its data, and was removed.
+- Real PostgreSQL replay of `2026-09-18..2026-09-20` produced identical dry-run/persisted digest
+  `72072fe107bfd9c4ae1dfab25d47b93bad0727fc8030da7dcb11877958bb16f2` and stored run 13 as
+  `REPLAY / SUCCEEDED`. Zero snapshots was the expected conservative result for the structural-only
+  resolved live entity.
+- Added exact Docker/native runbooks plus operations, security, evaluation-guide, and final-status
+  documentation. Real LLM and Meta calls remain disabled.
+- Fresh local verification: 162 passed/13 opt-in integrations skipped; Ruff and diff checks passed.
+  A fresh PostgreSQL `0001 -> 0008` database then passed 11 non-migration integration tests, and
+  three separate temporary databases passed the `0002`, `0005`, and `0008` migration fixtures.
+  All temporary databases were removed. Final Docker builds succeeded; API health/candidate routes
+  returned 200 and the scheduler container remained running.
