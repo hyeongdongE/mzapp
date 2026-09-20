@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.enums import CandidateStatus, ResolutionStatus
@@ -22,9 +23,16 @@ class CandidateGenerator:
             select(TrendCandidate).where(
                 TrendCandidate.source == observation.source,
                 TrendCandidate.normalized_text == normalized,
+                TrendCandidate.status.in_([CandidateStatus.NEW, CandidateStatus.ACTIVE]),
             )
         )
         if candidate is None:
+            latest_generation = self._session.scalar(
+                select(func.max(TrendCandidate.generation)).where(
+                    TrendCandidate.source == observation.source,
+                    TrendCandidate.normalized_text == normalized,
+                )
+            )
             candidate = TrendCandidate(
                 source=observation.source,
                 canonical_text=observation.canonical_text,
@@ -34,9 +42,24 @@ class CandidateGenerator:
                 status=CandidateStatus.NEW,
                 resolution_status=ResolutionStatus.NEEDS_REVIEW,
                 normalizer_version=self.normalizer_version,
+                generation=(latest_generation or 0) + 1,
             )
-            self._session.add(candidate)
-            self._session.flush()
+            try:
+                with self._session.begin_nested():
+                    self._session.add(candidate)
+                    self._session.flush()
+            except IntegrityError:
+                candidate = self._session.scalar(
+                    select(TrendCandidate).where(
+                        TrendCandidate.source == observation.source,
+                        TrendCandidate.normalized_text == normalized,
+                        TrendCandidate.status.in_(
+                            [CandidateStatus.NEW, CandidateStatus.ACTIVE]
+                        ),
+                    )
+                )
+                if candidate is None:
+                    raise
         else:
             candidate.first_seen_at = min(candidate.first_seen_at, observation.source_timestamp)
             candidate.last_seen_at = max(candidate.last_seen_at, observation.source_timestamp)
@@ -48,8 +71,21 @@ class CandidateGenerator:
             )
         )
         if link is None:
-            self._session.add(
-                CandidateObservation(candidate_id=candidate.id, observation_id=observation.id)
-            )
-            self._session.flush()
+            try:
+                with self._session.begin_nested():
+                    self._session.add(
+                        CandidateObservation(
+                            candidate_id=candidate.id, observation_id=observation.id
+                        )
+                    )
+                    self._session.flush()
+            except IntegrityError:
+                link = self._session.scalar(
+                    select(CandidateObservation).where(
+                        CandidateObservation.candidate_id == candidate.id,
+                        CandidateObservation.observation_id == observation.id,
+                    )
+                )
+                if link is None:
+                    raise
         return candidate

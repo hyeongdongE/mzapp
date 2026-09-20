@@ -3,12 +3,13 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import func, select
 
-from app.models.enums import CandidateStatus, RunStatus, Source
+from app.models.enums import CandidateStatus, ResolutionStatus, RunStatus, Source
 from app.models.tables import (
     CandidateObservation,
     CollectionRun,
     RawPayload,
     SourceObservation,
+    TrendCandidate,
 )
 from app.pipeline.candidate import CandidateGenerator
 
@@ -84,3 +85,29 @@ def test_candidate_rejects_text_without_any_normalized_content(db_session):
 
     with pytest.raises(ValueError, match="normalizable content"):
         CandidateGenerator(db_session).generate(observation)
+
+
+def test_inactive_candidate_is_not_mutated_when_text_reappears(db_session):
+    first_observation = add_observation(
+        db_session, item_id="first-generation", text="repeat", source_timestamp=AS_OF
+    )
+    generator = CandidateGenerator(db_session)
+    first = generator.generate(first_observation)
+    first.status = CandidateStatus.REJECTED
+    first.resolution_status = ResolutionStatus.RESOLVED
+    second_observation = add_observation(
+        db_session,
+        item_id="second-generation",
+        text="repeat",
+        source_timestamp=AS_OF + timedelta(hours=1),
+        observed_at=AS_OF + timedelta(hours=1),
+    )
+
+    second = generator.generate(second_observation)
+
+    assert second.id != first.id
+    assert second.generation == 2
+    assert second.status is CandidateStatus.NEW
+    assert first.last_seen_at == AS_OF
+    assert first.resolution_status is ResolutionStatus.RESOLVED
+    assert db_session.scalar(select(func.count()).select_from(TrendCandidate)) == 2

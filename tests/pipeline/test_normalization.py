@@ -19,3 +19,8 @@ def test_normalize_text_is_deterministic_without_transliteration(raw: str, expec
 
 def test_programming_language_symbols_do_not_collapse_to_same_name() -> None:
     assert len({normalize_text("C"), normalize_text("C++"), normalize_text("C#")}) == 3
+
+
+@pytest.mark.parametrize("raw", ["❤️", "✈️", "☕️", "👩‍💻"])
+def test_symbol_only_graphemes_do_not_leave_invisible_keys(raw: str) -> None:
+    assert normalize_text(raw) == ""

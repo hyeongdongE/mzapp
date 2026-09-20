@@ -103,6 +103,4 @@ def classify_metadata(
 
 def _contains_token(description: str, token: str) -> bool:
     folded = token.casefold().strip()
-    if folded.isascii():
-        return re.search(rf"(?<![a-z0-9]){re.escape(folded)}(?![a-z0-9])", description) is not None
-    return folded in description
+    return re.search(rf"(?<!\w){re.escape(folded)}(?!\w)", description) is not None

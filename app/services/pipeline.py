@@ -13,6 +13,7 @@ from app.collectors.wikidata import WikidataClient, WikidataRawResponse
 from app.models.enums import RunKind, RunStatus, Source
 from app.models.tables import (
     EntityResolutionAttempt,
+    EntityResolutionAttemptRawFetch,
     PipelineRun,
     RawFetch,
     SourceObservation,
@@ -21,7 +22,7 @@ from app.models.tables import (
 )
 from app.pipeline.candidate import CandidateGenerator
 from app.pipeline.classification import EntityClassifier
-from app.pipeline.entity import EntityResolver
+from app.pipeline.entity import EntityResolver, validate_live_cutoff
 from app.services.collection import CollectionService
 
 
@@ -77,6 +78,7 @@ class PipelineService:
             )
         versions = versions or PipelineVersions()
         started_at = self._now().astimezone(UTC)
+        validate_live_cutoff(as_of, started_at)
         run = PipelineRun(
             kind=kind,
             as_of=as_of,
@@ -95,7 +97,7 @@ class PipelineService:
         for observation in observations_for_replay(self._session, as_of):
             candidate = generator.generate(observation)
             candidates[candidate.id] = candidate
-        resolver = EntityResolver(self._session, self._wikidata)
+        resolver = EntityResolver(self._session, self._wikidata, now=lambda: started_at)
         try:
             candidates_to_resolve = list(candidates.values())
             if max_candidates is not None:
@@ -106,15 +108,24 @@ class PipelineService:
                 raw_fetch_ids: list[int] = []
                 for response in result.raw_responses:
                     raw_fetch_ids.append(self._persist_wikidata_raw(response))
-                self._session.add(
-                    EntityResolutionAttempt(
-                        candidate_id=candidate.id,
-                        pipeline_run_id=run.id,
-                        status=result.status,
-                        reason=result.reason,
-                        raw_fetch_ids=raw_fetch_ids,
-                        attempted_at=as_of,
+                attempted_at = self._now().astimezone(UTC)
+                attempt = EntityResolutionAttempt(
+                    candidate_id=candidate.id,
+                    pipeline_run_id=run.id,
+                    entity_id=result.entity_id,
+                    status=result.status,
+                    reason=result.reason,
+                    raw_fetch_ids=raw_fetch_ids,
+                    as_of=as_of,
+                    attempted_at=attempted_at,
+                )
+                self._session.add(attempt)
+                self._session.flush()
+                self._session.add_all(
+                    EntityResolutionAttemptRawFetch(
+                        attempt_id=attempt.id, raw_fetch_id=raw_fetch_id
                     )
+                    for raw_fetch_id in raw_fetch_ids
                 )
                 if result.entity_id is not None:
                     resolved_entity_ids.add(result.entity_id)
@@ -133,7 +144,7 @@ class PipelineService:
                     self._session,
                     entity,
                     pipeline_run_id=run.id,
-                    classified_at=as_of,
+                    classified_at=self._now().astimezone(UTC),
                 )
         except Exception:
             run.status = RunStatus.FAILED

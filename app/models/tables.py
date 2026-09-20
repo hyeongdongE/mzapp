@@ -127,7 +127,9 @@ class PipelineRun(Base):
 class TrendCandidate(Base):
     __tablename__ = "trend_candidates"
     __table_args__ = (
-        UniqueConstraint("source", "normalized_text", name="uq_candidate_source_text"),
+        UniqueConstraint(
+            "source", "normalized_text", "generation", name="uq_candidate_source_text_generation"
+        ),
         Index("ix_candidate_status_seen", "status", "last_seen_at"),
     )
 
@@ -142,6 +144,7 @@ class TrendCandidate(Base):
         enum_column(ResolutionStatus), nullable=False, default=ResolutionStatus.NEEDS_REVIEW
     )
     normalizer_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    generation: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
 class CandidateObservation(Base):
@@ -202,7 +205,10 @@ class EntityAlias(Base):
 
 class EntityCandidate(Base):
     __tablename__ = "entity_candidates"
-    __table_args__ = (UniqueConstraint("entity_id", "candidate_id", name="uq_entity_candidate"),)
+    __table_args__ = (
+        UniqueConstraint("entity_id", "candidate_id", name="uq_entity_candidate"),
+        UniqueConstraint("candidate_id", name="uq_entity_candidate_single_link"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     entity_id: Mapped[int] = mapped_column(ForeignKey("trend_entities.id"), nullable=False)
@@ -220,12 +226,27 @@ class EntityResolutionAttempt(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     candidate_id: Mapped[int] = mapped_column(ForeignKey("trend_candidates.id"), nullable=False)
     pipeline_run_id: Mapped[int] = mapped_column(ForeignKey("pipeline_runs.id"), nullable=False)
+    entity_id: Mapped[int | None] = mapped_column(ForeignKey("trend_entities.id"))
     status: Mapped[ResolutionStatus] = mapped_column(
         enum_column(ResolutionStatus), nullable=False
     )
     reason: Mapped[str] = mapped_column(String(160), nullable=False)
     raw_fetch_ids: Mapped[list[int]] = mapped_column(JSON, nullable=False, default=list)
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EntityResolutionAttemptRawFetch(Base):
+    __tablename__ = "entity_resolution_attempt_raw_fetches"
+    __table_args__ = (
+        UniqueConstraint("attempt_id", "raw_fetch_id", name="uq_resolution_attempt_raw_fetch"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    attempt_id: Mapped[int] = mapped_column(
+        ForeignKey("entity_resolution_attempts.id"), nullable=False
+    )
+    raw_fetch_id: Mapped[int] = mapped_column(ForeignKey("raw_fetches.id"), nullable=False)
 
 
 class EntityClassification(Base):

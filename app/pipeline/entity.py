@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -28,16 +29,30 @@ class ResolutionResult:
 
 
 class EntityResolver:
-    def __init__(self, session: Session, wikidata: WikidataClient) -> None:
+    def __init__(
+        self,
+        session: Session,
+        wikidata: WikidataClient,
+        *,
+        now: Callable[[], datetime] | None = None,
+    ) -> None:
         self._session = session
         self._wikidata = wikidata
         self._repo = EntityRepository(session)
+        self._now = now or (lambda: datetime.now(UTC))
 
-    async def resolve(self, candidate: TrendCandidate, _as_of: datetime) -> ResolutionResult:
+    async def resolve(self, candidate: TrendCandidate, as_of: datetime) -> ResolutionResult:
+        validate_live_cutoff(as_of, self._now().astimezone(UTC))
         if candidate.status in {CandidateStatus.REJECTED, CandidateStatus.MERGED}:
             return self._needs_review(candidate, "INACTIVE_CANDIDATE")
+        linked_entities = self._repo.entities_for_candidate(candidate.id)
+        if len(linked_entities) > 1:
+            return self._needs_review(candidate, "MULTIPLE_EXISTING_ENTITY_LINKS")
+        linked_entity = linked_entities[0] if linked_entities else None
         stored = self._repo.entities_by_alias(candidate.normalized_text)
         if len(stored) == 1:
+            if linked_entity is not None and linked_entity.id != stored[0].id:
+                return self._needs_review(candidate, "ENTITY_RELINK_CONFLICT")
             return self._resolve_to(candidate, stored[0].id, "EXACT_STORED_ALIAS")
         if len(stored) > 1:
             return self._needs_review(candidate, "AMBIGUOUS_STORED_ALIAS")
@@ -59,6 +74,8 @@ class EntityResolver:
         metadata_classification = classify_metadata(match.instance_of, match.description)
         if metadata_classification.reason.startswith("CONFLICTING_RULES_NEEDS_REVIEW"):
             return self._needs_review(candidate, "CONFLICTING_WIKIDATA_METADATA", lookup)
+        if linked_entity is not None and linked_entity.wikidata_id != match.entity_id:
+            return self._needs_review(candidate, "ENTITY_RELINK_CONFLICT", lookup)
         entity = self._repo.by_wikidata_id(match.entity_id)
         if entity is None:
             entity = self._repo.create_entity(
@@ -87,7 +104,8 @@ class EntityResolver:
     def _resolve_to(
         self, candidate: TrendCandidate, entity_id: int, reason: str
     ) -> ResolutionResult:
-        self._repo.link_candidate(entity_id, candidate.id, reason)
+        if not self._repo.link_candidate(entity_id, candidate.id, reason):
+            return self._needs_review(candidate, "ENTITY_RELINK_CONFLICT")
         candidate.resolution_status = ResolutionStatus.RESOLVED
         candidate.status = CandidateStatus.ACTIVE
         self._session.flush()
@@ -119,3 +137,12 @@ class EntityResolver:
 def _is_exact(normalized_candidate: str, match) -> bool:
     names = {normalize_text(match.label), *(normalize_text(alias) for alias in match.aliases)}
     return normalized_candidate in names
+
+
+def validate_live_cutoff(as_of: datetime, now: datetime) -> None:
+    if as_of.tzinfo is None or as_of.utcoffset() is None or as_of.utcoffset() != timedelta(0):
+        raise ValueError("as_of must be aware UTC")
+    if as_of < now - timedelta(minutes=5):
+        raise ValueError(
+            "historical entity projection is required when as_of is older than five minutes"
+        )

@@ -44,6 +44,10 @@ class FakeWikidata:
         return WikidataLookup(matches=self.matches, raw_responses=[], complete=self.complete)
 
 
+def resolver(db_session, wikidata, *, now: datetime = AS_OF) -> EntityResolver:
+    return EntityResolver(db_session, wikidata, now=lambda: now)
+
+
 @pytest.mark.asyncio
 async def test_exact_stored_alias_resolves_without_wikidata(db_session):
     repo = EntityRepository(db_session)
@@ -55,7 +59,7 @@ async def test_exact_stored_alias_resolves_without_wikidata(db_session):
     )
     repo.add_alias(entity.id, "Lee Hyunjung", "en", source="HUMAN", approved=True)
 
-    result = await EntityResolver(db_session, FakeWikidata()).resolve(
+    result = await resolver(db_session, FakeWikidata()).resolve(
         candidate(db_session, "lee hyunjung"), AS_OF
     )
 
@@ -71,7 +75,7 @@ async def test_same_exact_label_multiple_wikidata_items_needs_review(db_session)
         WikidataMatch("Q2", "김민수", (), "대한민국의 축구 선수", ("Q5",)),
     ]
 
-    result = await EntityResolver(db_session, FakeWikidata(matches)).resolve(
+    result = await resolver(db_session, FakeWikidata(matches)).resolve(
         candidate(db_session, "김민수"), AS_OF
     )
 
@@ -95,7 +99,7 @@ async def test_unapproved_imported_alias_cannot_bypass_homonym_check(db_session)
         WikidataMatch("Q2", "김민수", (), "대한민국의 축구 선수", ("Q5",)),
     ]
 
-    result = await EntityResolver(db_session, FakeWikidata(matches)).resolve(
+    result = await resolver(db_session, FakeWikidata(matches)).resolve(
         candidate(db_session, "김민수"), AS_OF
     )
 
@@ -106,7 +110,7 @@ async def test_unapproved_imported_alias_cannot_bypass_homonym_check(db_session)
 @pytest.mark.asyncio
 async def test_truncated_exact_wikidata_search_needs_review(db_session):
     match = WikidataMatch("Q1", "김민수", (), "대한민국의 배우", ("Q5",))
-    result = await EntityResolver(
+    result = await resolver(
         db_session, FakeWikidata([match], complete=False)
     ).resolve(candidate(db_session, "김민수"), AS_OF)
 
@@ -117,7 +121,7 @@ async def test_truncated_exact_wikidata_search_needs_review(db_session):
 @pytest.mark.asyncio
 async def test_conflicting_wikidata_type_and_description_needs_review(db_session):
     match = WikidataMatch("Q1", "이현중", (), "대한민국의 농구 선수", ("Q11424",))
-    result = await EntityResolver(db_session, FakeWikidata([match])).resolve(
+    result = await resolver(db_session, FakeWikidata([match])).resolve(
         candidate(db_session, "이현중"), AS_OF
     )
 
@@ -136,7 +140,7 @@ async def test_single_exact_wikidata_match_creates_aliases_and_link(db_session):
     )
     value = candidate(db_session, "이현중 농구")
 
-    result = await EntityResolver(db_session, FakeWikidata([match])).resolve(value, AS_OF)
+    result = await resolver(db_session, FakeWikidata([match])).resolve(value, AS_OF)
 
     assert result.status is ResolutionStatus.RESOLVED
     entity = db_session.scalar(select(TrendEntity).where(TrendEntity.id == result.entity_id))
@@ -154,10 +158,40 @@ async def test_single_exact_wikidata_match_creates_aliases_and_link(db_session):
 @pytest.mark.asyncio
 async def test_wikidata_unavailable_keeps_candidate_for_review(db_session):
     value = candidate(db_session, "이현중")
-    result = await EntityResolver(
+    result = await resolver(
         db_session, FakeWikidata(error=HttpRequestFailed("TIMEOUT"))
     ).resolve(value, AS_OF)
 
     assert result.entity_id is None
     assert result.status is ResolutionStatus.NEEDS_REVIEW
     assert result.reason == "WIKIDATA_UNAVAILABLE"
+
+
+@pytest.mark.asyncio
+async def test_historical_cutoff_never_calls_live_wikidata(db_session):
+    class UnexpectedWikidata:
+        async def lookup(self, _query: str):
+            raise AssertionError("historical cutoff must not call live Wikidata")
+
+    with pytest.raises(ValueError, match="historical entity projection"):
+        await resolver(db_session, UnexpectedWikidata()).resolve(
+            candidate(db_session, "old"),
+            AS_OF.replace(hour=11),
+        )
+
+
+@pytest.mark.asyncio
+async def test_existing_candidate_link_cannot_silently_move_to_new_qid(db_session):
+    value = candidate(db_session, "Foo")
+    first = await resolver(
+        db_session, FakeWikidata([WikidataMatch("Q1", "Foo", (), None, ())])
+    ).resolve(value, AS_OF)
+    second = await resolver(
+        db_session, FakeWikidata([WikidataMatch("Q2", "Foo", (), None, ())])
+    ).resolve(value, AS_OF)
+
+    assert first.status is ResolutionStatus.RESOLVED
+    assert second.status is ResolutionStatus.NEEDS_REVIEW
+    assert second.reason == "ENTITY_RELINK_CONFLICT"
+    assert list(db_session.scalars(select(EntityCandidate))) != []
+    assert len(list(db_session.scalars(select(EntityCandidate)))) == 1

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.enums import ResolutionStatus, ReviewStatus
@@ -29,6 +30,15 @@ class EntityRepository:
             select(TrendEntity).where(TrendEntity.wikidata_id == wikidata_id)
         )
 
+    def entities_for_candidate(self, candidate_id: int) -> list[TrendEntity]:
+        return list(
+            self._session.scalars(
+                select(TrendEntity)
+                .join(EntityCandidate, EntityCandidate.entity_id == TrendEntity.id)
+                .where(EntityCandidate.candidate_id == candidate_id)
+            )
+        )
+
     def create_entity(
         self,
         *,
@@ -50,9 +60,18 @@ class EntityRepository:
             review_status=ReviewStatus.PENDING,
             version=1,
         )
-        self._session.add(entity)
-        self._session.flush()
-        return entity
+        try:
+            with self._session.begin_nested():
+                self._session.add(entity)
+                self._session.flush()
+            return entity
+        except IntegrityError:
+            if wikidata_id is None:
+                raise
+            existing = self.by_wikidata_id(wikidata_id)
+            if existing is None:
+                raise
+            return existing
 
     def add_alias(
         self,
@@ -85,20 +104,28 @@ class EntityRepository:
                 )
             )
 
-    def link_candidate(self, entity_id: int, candidate_id: int, reason: str) -> None:
+    def link_candidate(self, entity_id: int, candidate_id: int, reason: str) -> bool:
         existing = self._session.scalar(
-            select(EntityCandidate).where(
-                EntityCandidate.entity_id == entity_id,
-                EntityCandidate.candidate_id == candidate_id,
-            )
+            select(EntityCandidate).where(EntityCandidate.candidate_id == candidate_id)
         )
-        if existing is None:
-            self._session.add(
-                EntityCandidate(
-                    entity_id=entity_id,
-                    candidate_id=candidate_id,
-                    entity_version="entity-v1",
-                    match_reason=reason,
+        if existing is not None:
+            return existing.entity_id == entity_id
+        try:
+            with self._session.begin_nested():
+                self._session.add(
+                    EntityCandidate(
+                        entity_id=entity_id,
+                        candidate_id=candidate_id,
+                        entity_version="entity-v1",
+                        match_reason=reason,
+                    )
                 )
+                self._session.flush()
+            return True
+        except IntegrityError:
+            existing = self._session.scalar(
+                select(EntityCandidate).where(EntityCandidate.candidate_id == candidate_id)
             )
-        self._session.flush()
+            if existing is None:
+                raise
+            return existing.entity_id == entity_id

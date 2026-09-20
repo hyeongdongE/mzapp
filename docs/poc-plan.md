@@ -177,3 +177,14 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
   resolution-attempt provenance. PostgreSQL migration and schema inspection passed.
 - Post-fix verification: 66 tests passed/4 opt-in PostgreSQL tests skipped and Ruff passed. Live
   pipeline run 5 succeeded and linked official raw fetches 9/10 to its resolution attempt.
+- Reviewer follow-up identified two remaining High paths: stale cutoffs mislabeled as `LIVE` and
+  candidate-to-entity relinking without an auditable selected-entity FK. Migration `0005` now stores
+  cutoff/actual attempt time/selected entity, adds FK-backed attempt-to-fetch links, and enforces one
+  entity link per candidate. Stale live cutoffs fail before network or run creation.
+- Inactive candidates now create immutable new generations; emoji variation selectors cannot create
+  invisible normalized keys; Korean token rules use Unicode boundaries. Entity/candidate/link
+  get-or-create paths recover unique races with savepoints.
+- Live run 6 succeeded with cutoff `15:02:21.256920Z`, attempt time `15:02:22.690475Z`, selected
+  entity 1, and raw fetch FKs 11/12. A stale-cutoff command produced zero new fetches and zero runs.
+- A fresh PostgreSQL database migrated `0001 -> 0005` (21 tables), and the real concurrent QID
+  get-or-create regression passed; the temporary verification database was then removed.

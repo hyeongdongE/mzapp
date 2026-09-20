@@ -47,6 +47,14 @@ def test_unknown_classification_falls_back_to_other_for_review():
     assert result.reason == "NO_MATCH_NEEDS_REVIEW"
 
 
+@pytest.mark.parametrize("description", ["가수분해 효소", "선수금 회계 항목"])
+def test_korean_tokens_do_not_match_inside_unrelated_compound_words(description):
+    result = EntityClassifier().classify(entity(description))
+
+    assert result.category is Category.OTHER
+    assert result.reason == "NO_MATCH_NEEDS_REVIEW"
+
+
 def test_classification_appends_history_instead_of_overwriting(db_session):
     value = entity("대한민국의 농구 선수")
     run = PipelineRun(

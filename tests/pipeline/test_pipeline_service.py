@@ -1,11 +1,17 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import func, select
 
 from app.collectors.wikidata import WikidataLookup, WikidataMatch, WikidataRawResponse
 from app.models.enums import RunKind, RunStatus
-from app.models.tables import EntityResolutionAttempt, PipelineRun, RawFetch, TrendEntity
+from app.models.tables import (
+    EntityResolutionAttempt,
+    EntityResolutionAttemptRawFetch,
+    PipelineRun,
+    RawFetch,
+    TrendEntity,
+)
 from app.services.pipeline import PipelineService, observations_for_replay
 from tests.pipeline.test_candidate import AS_OF, add_observation
 
@@ -81,7 +87,14 @@ async def test_pipeline_persists_versions_entity_and_wikidata_raw_fetches(db_ses
     attempt = db_session.scalar(select(EntityResolutionAttempt))
     assert attempt is not None
     assert attempt.pipeline_run_id == run.id
+    assert attempt.entity_id is not None
+    assert attempt.as_of.replace(tzinfo=UTC) == AS_OF
+    assert attempt.attempted_at.replace(tzinfo=UTC) == AS_OF + timedelta(seconds=1)
     assert len(attempt.raw_fetch_ids) == 1
+    raw_link = db_session.scalar(select(EntityResolutionAttemptRawFetch))
+    assert raw_link is not None
+    assert raw_link.attempt_id == attempt.id
+    assert raw_link.raw_fetch_id == attempt.raw_fetch_ids[0]
 
 
 @pytest.mark.asyncio
@@ -96,5 +109,23 @@ async def test_entity_replay_is_blocked_until_historical_projection_exists(db_se
         await PipelineService(db_session, UnexpectedWikidata()).build_entities(
             AS_OF, kind=RunKind.REPLAY
         )
+
+    assert db_session.scalar(select(func.count()).select_from(PipelineRun)) == 0
+
+
+@pytest.mark.asyncio
+async def test_live_pipeline_rejects_stale_cutoff_before_creating_run(db_session) -> None:
+    class UnexpectedWikidata:
+        collector_version = "wikidata-api-v1"
+
+        async def lookup(self, _query: str):
+            raise AssertionError("stale live cutoff must not call Wikidata")
+
+    with pytest.raises(ValueError, match="historical entity projection"):
+        await PipelineService(
+            db_session,
+            UnexpectedWikidata(),
+            now=lambda: AS_OF + timedelta(minutes=6),
+        ).build_entities(AS_OF)
 
     assert db_session.scalar(select(func.count()).select_from(PipelineRun)) == 0
