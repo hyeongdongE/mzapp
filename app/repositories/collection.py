@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
 from typing import TypeVar
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.enums import Source
+from app.models.enums import RunStatus, Source
 from app.models.tables import CollectionRun, RawFetch, RawPayload, SourceObservation
 
 T = TypeVar("T")
@@ -44,6 +45,30 @@ class CollectionRepository:
 
     def find_fetch(self, run_id: int) -> RawFetch | None:
         return self.session.scalar(select(RawFetch).where(RawFetch.run_id == run_id))
+
+    def mark_failed_unless_succeeded(
+        self,
+        *,
+        run_key: str,
+        source: Source,
+        completed_at: datetime,
+        error_code: str,
+    ) -> bool:
+        result = self.session.execute(
+            update(CollectionRun)
+            .where(
+                CollectionRun.run_key == run_key,
+                CollectionRun.source == source,
+                CollectionRun.status != RunStatus.SUCCEEDED,
+            )
+            .values(
+                status=RunStatus.FAILED,
+                completed_at=completed_at,
+                error_code=error_code,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        return bool(result.rowcount)
 
     def existing_source_item_ids(self, run_id: int) -> set[str]:
         return set(

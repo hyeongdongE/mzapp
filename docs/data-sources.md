@@ -62,7 +62,8 @@ rate limits are confirmed.
 - `source_observations` records item occurrences per run. Feed-provided news URLs remain untrusted
   metadata and are never fetched.
 - Typed collection failures are committed in an independent transaction with a redacted error code.
-- A successful run is a monotonic terminal state: a later failed retry cannot overwrite it. Concurrent
-  retries recover run, raw blob, and per-run fetch uniqueness conflicts through database savepoints.
+- A successful run is a monotonic terminal state: an atomic conditional update prevents even a stale
+  failed transaction from overwriting its status or error fields. Concurrent retries recover run,
+  raw blob, and per-run fetch uniqueness conflicts through database savepoints.
 - Migration `0002` deterministically maps legacy runs containing multiple payloads to the payload of
   the latest observation; the original raw blobs and observations remain unchanged for audit.

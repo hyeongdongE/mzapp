@@ -161,9 +161,10 @@ class CollectionService:
             assert isinstance(run, CollectionRun)
         elif run.source != source:
             raise ValueError("collection run key cannot be reused across sources")
-        if run.status == RunStatus.SUCCEEDED:
-            return
-        run.status = RunStatus.FAILED
-        run.completed_at = completed_at
-        run.error_code = error_code
+        self._repo.mark_failed_unless_succeeded(
+            run_key=run_key,
+            source=source,
+            completed_at=completed_at,
+            error_code=error_code,
+        )
         self._session.flush()

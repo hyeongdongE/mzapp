@@ -149,5 +149,6 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
   were also fixed: concurrent resume of one failed run now recovers the per-run fetch conflict and a
   failed retry cannot downgrade a successful run; legacy multi-payload backfill selects the payload
   linked to the latest observation while leaving all raw blobs and observations intact.
-- Final gate regression: 38 local tests passed with three opt-in PostgreSQL tests skipped; the two
-  PostgreSQL concurrency cases and the legacy multi-payload migration case passed separately.
+- Final gate regression: 38 local tests passed with four opt-in PostgreSQL tests skipped; the three
+  PostgreSQL concurrency/state-race cases and the legacy multi-payload migration case passed
+  separately. `SUCCEEDED` is protected by an atomic conditional failure update.

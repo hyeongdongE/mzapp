@@ -115,3 +115,55 @@ def test_concurrent_retries_resume_one_failed_run_idempotently() -> None:
             == 1
         )
     engine.dispose()
+
+
+def test_stale_failure_transaction_cannot_overwrite_committed_success() -> None:
+    assert TEST_DATABASE_URL is not None
+    engine = create_engine(TEST_DATABASE_URL)
+    run_key = "concurrency:success-is-terminal"
+    with Session(engine) as setup:
+        setup.add(
+            CollectionRun(
+                run_key=run_key,
+                source=Source.GOOGLE_TRENDS,
+                started_at=datetime(2026, 9, 20, 14, 0, tzinfo=UTC),
+                completed_at=datetime(2026, 9, 20, 14, 0, 1, tzinfo=UTC),
+                status=RunStatus.FAILED,
+                error_code="NETWORK_ERROR",
+            )
+        )
+        setup.commit()
+
+    with Session(engine) as stale_failure:
+        stale_run = stale_failure.scalar(
+            select(CollectionRun).where(CollectionRun.run_key == run_key)
+        )
+        assert stale_run is not None
+        assert stale_run.status is RunStatus.FAILED
+
+        with Session(engine) as success:
+            successful_run = success.scalar(
+                select(CollectionRun).where(CollectionRun.run_key == run_key)
+            )
+            assert successful_run is not None
+            successful_run.status = RunStatus.SUCCEEDED
+            successful_run.error_code = None
+            success.commit()
+
+        service = CollectionService(stale_failure)
+        service._repo.find_run = lambda _run_key: stale_run
+        service._record_failure(
+            Source.GOOGLE_TRENDS,
+            run_key,
+            started_at=datetime(2026, 9, 20, 14, 0, tzinfo=UTC),
+            completed_at=datetime(2026, 9, 20, 14, 0, 2, tzinfo=UTC),
+            error_code="TIMEOUT",
+        )
+        stale_failure.commit()
+
+    with Session(engine) as verification:
+        run = verification.scalar(select(CollectionRun).where(CollectionRun.run_key == run_key))
+        assert run is not None
+        assert run.status is RunStatus.SUCCEEDED
+        assert run.error_code is None
+    engine.dispose()
