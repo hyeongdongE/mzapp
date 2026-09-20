@@ -10,7 +10,12 @@ from app.pipeline.normalization import normalize_text
         ("ＡＩ・Tech", "ai tech"),
         ("Lee   Hyunjung", "lee hyunjung"),
         ("Café—AI", "café ai"),
+        ("C / C++ / C#", "c c++ c#"),
     ],
 )
 def test_normalize_text_is_deterministic_without_transliteration(raw: str, expected: str) -> None:
     assert normalize_text(raw) == expected
+
+
+def test_programming_language_symbols_do_not_collapse_to_same_name() -> None:
+    assert len({normalize_text("C"), normalize_text("C++"), normalize_text("C#")}) == 3

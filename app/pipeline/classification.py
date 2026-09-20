@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -39,15 +40,8 @@ class ClassificationResult:
 
 class EntityClassifier:
     def classify(self, entity: TrendEntity) -> ClassificationResult:
-        if entity.entity_type in INSTANCE_RULES:
-            category = INSTANCE_RULES[entity.entity_type]
-            return ClassificationResult(category, 1.0, f"INSTANCE_OF:{entity.entity_type}")
-        description = (entity.description or "").casefold()
-        for category, tokens in DESCRIPTION_RULES:
-            for token in tokens:
-                if token in description:
-                    return ClassificationResult(category, 0.9, f"DESCRIPTION_TOKEN:{token}")
-        return ClassificationResult(Category.OTHER, 0.0, "NO_MATCH_NEEDS_REVIEW")
+        entity_types = entity.entity_types or ([entity.entity_type] if entity.entity_type else [])
+        return classify_metadata(entity_types, entity.description)
 
     def persist(
         self,
@@ -71,3 +65,44 @@ class EntityClassifier:
         entity.category = result.category
         session.flush()
         return classification
+
+
+def classify_metadata(
+    entity_types: list[str] | tuple[str, ...], description_value: str | None
+) -> ClassificationResult:
+    instance_matches = {
+        INSTANCE_RULES[entity_type]
+        for entity_type in entity_types
+        if entity_type in INSTANCE_RULES
+    }
+    description = (description_value or "").casefold()
+    description_matches: dict[Category, str] = {}
+    for category, tokens in DESCRIPTION_RULES:
+        for token in tokens:
+            if _contains_token(description, token):
+                description_matches.setdefault(category, token)
+    categories = instance_matches | set(description_matches)
+    if len(categories) > 1:
+        names = ",".join(sorted(category.value for category in categories))
+        return ClassificationResult(
+            Category.OTHER, 0.0, f"CONFLICTING_RULES_NEEDS_REVIEW:{names}"
+        )
+    if len(instance_matches) == 1:
+        category = next(iter(instance_matches))
+        matched_types = ",".join(
+            entity_type
+            for entity_type in entity_types
+            if INSTANCE_RULES.get(entity_type) == category
+        )
+        return ClassificationResult(category, 1.0, f"INSTANCE_OF:{matched_types}")
+    if len(description_matches) == 1:
+        category, token = next(iter(description_matches.items()))
+        return ClassificationResult(category, 0.9, f"DESCRIPTION_TOKEN:{token}")
+    return ClassificationResult(Category.OTHER, 0.0, "NO_MATCH_NEEDS_REVIEW")
+
+
+def _contains_token(description: str, token: str) -> bool:
+    folded = token.casefold().strip()
+    if folded.isascii():
+        return re.search(rf"(?<![a-z0-9]){re.escape(folded)}(?![a-z0-9])", description) is not None
+    return folded in description

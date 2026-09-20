@@ -11,7 +11,14 @@ from sqlalchemy.orm import Session
 from app.collectors.base import CollectionBatch
 from app.collectors.wikidata import WikidataClient, WikidataRawResponse
 from app.models.enums import RunKind, RunStatus, Source
-from app.models.tables import PipelineRun, SourceObservation, TrendCandidate, TrendEntity
+from app.models.tables import (
+    EntityResolutionAttempt,
+    PipelineRun,
+    RawFetch,
+    SourceObservation,
+    TrendCandidate,
+    TrendEntity,
+)
 from app.pipeline.candidate import CandidateGenerator
 from app.pipeline.classification import EntityClassifier
 from app.pipeline.entity import EntityResolver
@@ -63,6 +70,11 @@ class PipelineService:
         kind: RunKind = RunKind.LIVE,
         max_candidates: int | None = None,
     ) -> PipelineRun:
+        if kind is RunKind.REPLAY:
+            raise ValueError(
+                "entity replay requires a historical entity projection; "
+                "live Wikidata resolution is disabled"
+            )
         versions = versions or PipelineVersions()
         started_at = self._now().astimezone(UTC)
         run = PipelineRun(
@@ -88,12 +100,35 @@ class PipelineService:
             candidates_to_resolve = list(candidates.values())
             if max_candidates is not None:
                 candidates_to_resolve = candidates_to_resolve[:max_candidates]
+            resolved_entity_ids: set[int] = set()
             for candidate in candidates_to_resolve:
                 result = await resolver.resolve(candidate, as_of)
+                raw_fetch_ids: list[int] = []
                 for response in result.raw_responses:
-                    self._persist_wikidata_raw(response)
+                    raw_fetch_ids.append(self._persist_wikidata_raw(response))
+                self._session.add(
+                    EntityResolutionAttempt(
+                        candidate_id=candidate.id,
+                        pipeline_run_id=run.id,
+                        status=result.status,
+                        reason=result.reason,
+                        raw_fetch_ids=raw_fetch_ids,
+                        attempted_at=as_of,
+                    )
+                )
+                if result.entity_id is not None:
+                    resolved_entity_ids.add(result.entity_id)
             classifier = EntityClassifier()
-            for entity in self._session.scalars(select(TrendEntity).order_by(TrendEntity.id)):
+            entities = []
+            if resolved_entity_ids:
+                entities = list(
+                    self._session.scalars(
+                        select(TrendEntity)
+                        .where(TrendEntity.id.in_(resolved_entity_ids))
+                        .order_by(TrendEntity.id)
+                    )
+                )
+            for entity in entities:
                 classifier.persist(
                     self._session,
                     entity,
@@ -110,7 +145,7 @@ class PipelineService:
         self._session.flush()
         return run
 
-    def _persist_wikidata_raw(self, response: WikidataRawResponse) -> None:
+    def _persist_wikidata_raw(self, response: WikidataRawResponse) -> int:
         digest = hashlib.sha256(response.raw_bytes).hexdigest()
         url_digest = hashlib.sha256(response.request_url.encode()).hexdigest()[:16]
         batch = CollectionBatch(
@@ -122,7 +157,12 @@ class PipelineService:
             collector_version=self._wikidata.collector_version,
             parser_version=response.parser_version,
         )
-        CollectionService(self._session).persist(
+        persisted = CollectionService(self._session).persist(
             batch,
             run_key=f"wikidata:{response.collected_at:%Y%m%dT%H%M%S%fZ}:{url_digest}:{digest[:16]}",
         )
+        fetch_id = self._session.scalar(
+            select(RawFetch.id).where(RawFetch.run_id == persisted.run_id)
+        )
+        assert fetch_id is not None
+        return fetch_id

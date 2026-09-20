@@ -4,8 +4,8 @@ import pytest
 from sqlalchemy import func, select
 
 from app.collectors.wikidata import WikidataLookup, WikidataMatch, WikidataRawResponse
-from app.models.enums import RunStatus
-from app.models.tables import PipelineRun, RawFetch, TrendEntity
+from app.models.enums import RunKind, RunStatus
+from app.models.tables import EntityResolutionAttempt, PipelineRun, RawFetch, TrendEntity
 from app.services.pipeline import PipelineService, observations_for_replay
 from tests.pipeline.test_candidate import AS_OF, add_observation
 
@@ -78,3 +78,23 @@ async def test_pipeline_persists_versions_entity_and_wikidata_raw_fetches(db_ses
     assert db_session.scalar(select(func.count()).select_from(PipelineRun)) == 1
     assert db_session.scalar(select(func.count()).select_from(TrendEntity)) == 1
     assert db_session.scalar(select(func.count()).select_from(RawFetch)) == 1
+    attempt = db_session.scalar(select(EntityResolutionAttempt))
+    assert attempt is not None
+    assert attempt.pipeline_run_id == run.id
+    assert len(attempt.raw_fetch_ids) == 1
+
+
+@pytest.mark.asyncio
+async def test_entity_replay_is_blocked_until_historical_projection_exists(db_session) -> None:
+    class UnexpectedWikidata:
+        collector_version = "wikidata-api-v1"
+
+        async def lookup(self, _query: str):
+            raise AssertionError("replay must not call live Wikidata")
+
+    with pytest.raises(ValueError, match="historical entity projection"):
+        await PipelineService(db_session, UnexpectedWikidata()).build_entities(
+            AS_OF, kind=RunKind.REPLAY
+        )
+
+    assert db_session.scalar(select(func.count()).select_from(PipelineRun)) == 0

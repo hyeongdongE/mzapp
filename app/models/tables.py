@@ -166,10 +166,11 @@ class TrendEntity(Base):
     normalized_name: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
     entity_type: Mapped[str | None] = mapped_column(String(160))
     description: Mapped[str | None] = mapped_column(Text)
-    wikidata_id: Mapped[str | None] = mapped_column(String(32), index=True)
+    wikidata_id: Mapped[str | None] = mapped_column(String(32), unique=True, index=True)
     resolution_status: Mapped[ResolutionStatus] = mapped_column(
         enum_column(ResolutionStatus), nullable=False
     )
+    entity_types: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     category: Mapped[Category | None] = mapped_column(enum_column(Category), index=True)
     review_status: Mapped[ReviewStatus] = mapped_column(
         enum_column(ReviewStatus), nullable=False, default=ReviewStatus.PENDING
@@ -195,6 +196,8 @@ class EntityAlias(Base):
     alias: Mapped[str] = mapped_column(String(500), nullable=False)
     normalized_alias: Mapped[str] = mapped_column(String(500), nullable=False)
     language: Mapped[str] = mapped_column(String(16), nullable=False, default="und")
+    source: Mapped[str] = mapped_column(String(40), nullable=False, default="WIKIDATA_ALIAS")
+    approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
 class EntityCandidate(Base):
@@ -206,6 +209,23 @@ class EntityCandidate(Base):
     candidate_id: Mapped[int] = mapped_column(ForeignKey("trend_candidates.id"), nullable=False)
     entity_version: Mapped[str] = mapped_column(String(80), nullable=False)
     match_reason: Mapped[str] = mapped_column(String(160), nullable=False)
+
+
+class EntityResolutionAttempt(Base):
+    __tablename__ = "entity_resolution_attempts"
+    __table_args__ = (
+        Index("ix_resolution_attempt_run_candidate", "pipeline_run_id", "candidate_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    candidate_id: Mapped[int] = mapped_column(ForeignKey("trend_candidates.id"), nullable=False)
+    pipeline_run_id: Mapped[int] = mapped_column(ForeignKey("pipeline_runs.id"), nullable=False)
+    status: Mapped[ResolutionStatus] = mapped_column(
+        enum_column(ResolutionStatus), nullable=False
+    )
+    reason: Mapped[str] = mapped_column(String(160), nullable=False)
+    raw_fetch_ids: Mapped[list[int]] = mapped_column(JSON, nullable=False, default=list)
+    attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class EntityClassification(Base):

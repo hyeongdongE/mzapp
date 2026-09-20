@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from sqlalchemy import func, select
 
 from app.models.enums import CandidateStatus, RunStatus, Source
@@ -74,3 +75,12 @@ def test_candidate_reuses_exact_source_normalized_text_and_links_each_observatio
     assert candidate.first_seen_at == AS_OF - timedelta(hours=1)
     assert candidate.last_seen_at == AS_OF
     assert db_session.scalar(select(func.count()).select_from(CandidateObservation)) == 2
+
+
+def test_candidate_rejects_text_without_any_normalized_content(db_session):
+    observation = add_observation(
+        db_session, item_id="punctuation", text="...", source_timestamp=AS_OF
+    )
+
+    with pytest.raises(ValueError, match="normalizable content"):
+        CandidateGenerator(db_session).generate(observation)

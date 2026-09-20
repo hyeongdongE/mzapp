@@ -16,6 +16,8 @@ class CandidateGenerator:
 
     def generate(self, observation: SourceObservation) -> TrendCandidate:
         normalized = normalize_text(observation.canonical_text)
+        if not normalized:
+            raise ValueError("candidate text has no normalizable content")
         candidate = self._session.scalar(
             select(TrendCandidate).where(
                 TrendCandidate.source == observation.source,

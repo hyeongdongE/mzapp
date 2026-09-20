@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlencode
 
-from app.collectors.base import MalformedPayload
+from app.collectors.base import CollectorError, MalformedPayload
 from app.collectors.http import SafeHttpClient
 
 
@@ -32,6 +32,16 @@ class WikidataRawResponse:
 class WikidataLookup:
     matches: list[WikidataMatch]
     raw_responses: list[WikidataRawResponse]
+    complete: bool = True
+
+
+class WikidataLookupFailed(CollectorError):
+    def __init__(
+        self, code: str, raw_responses: list[WikidataRawResponse]
+    ) -> None:
+        self.code = code
+        self.raw_responses = raw_responses
+        super().__init__(f"Wikidata lookup failed after a partial response ({code})")
 
 
 class WikidataClient:
@@ -43,7 +53,7 @@ class WikidataClient:
         endpoint: str,
         *,
         now: Callable[[], datetime] | None = None,
-        limit: int = 5,
+        limit: int = 50,
     ) -> None:
         self._http = http
         self._endpoint = endpoint
@@ -61,14 +71,18 @@ class WikidataClient:
         )
         search_bytes = await self._http.get_bytes(search_url)
         responses = [self._response(search_url, search_bytes)]
-        search = _json_object(search_bytes)
-        results = search.get("search")
-        if not isinstance(results, list):
-            raise MalformedPayload("Wikidata search results are missing")
+        try:
+            search = _json_object(search_bytes)
+            results = search.get("search")
+            if not isinstance(results, list):
+                raise MalformedPayload("Wikidata search results are missing")
+        except CollectorError as exc:
+            raise WikidataLookupFailed(exc.code, responses) from exc
+        complete = "search-continue" not in search
         ids = [item.get("id") for item in results if isinstance(item, dict)]
         entity_ids = [value for value in ids if isinstance(value, str) and value.startswith("Q")]
         if not entity_ids:
-            return WikidataLookup(matches=[], raw_responses=responses)
+            return WikidataLookup(matches=[], raw_responses=responses, complete=complete)
 
         entities_url = self._url(
             action="wbgetentities",
@@ -76,18 +90,24 @@ class WikidataClient:
             props="labels|aliases|descriptions|claims",
             languages="ko|en",
         )
-        entity_bytes = await self._http.get_bytes(entities_url)
+        try:
+            entity_bytes = await self._http.get_bytes(entities_url)
+        except CollectorError as exc:
+            raise WikidataLookupFailed(exc.code, responses) from exc
         responses.append(self._response(entities_url, entity_bytes))
-        payload = _json_object(entity_bytes)
-        entities = payload.get("entities")
-        if not isinstance(entities, dict):
-            raise MalformedPayload("Wikidata entities are missing")
-        matches = [
-            _parse_entity(entity_id, entities.get(entity_id))
-            for entity_id in entity_ids
-            if entity_id in entities
-        ]
-        return WikidataLookup(matches=matches, raw_responses=responses)
+        try:
+            payload = _json_object(entity_bytes)
+            entities = payload.get("entities")
+            if not isinstance(entities, dict):
+                raise MalformedPayload("Wikidata entities are missing")
+            matches = [
+                _parse_entity(entity_id, entities.get(entity_id))
+                for entity_id in entity_ids
+                if entity_id in entities
+            ]
+        except CollectorError as exc:
+            raise WikidataLookupFailed(exc.code, responses) from exc
+        return WikidataLookup(matches=matches, raw_responses=responses, complete=complete)
 
     def _url(self, **params: str) -> str:
         return f"{self._endpoint}?{urlencode({'format': 'json', **params})}"

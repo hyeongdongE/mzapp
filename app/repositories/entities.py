@@ -13,20 +13,16 @@ class EntityRepository:
         self._session = session
 
     def entities_by_alias(self, normalized_alias: str) -> list[TrendEntity]:
+        matching_entity_ids = select(EntityAlias.entity_id).where(
+            EntityAlias.normalized_alias == normalized_alias,
+            EntityAlias.approved.is_(True),
+        )
         alias_entities = list(
             self._session.scalars(
-                select(TrendEntity)
-                .join(EntityAlias, EntityAlias.entity_id == TrendEntity.id)
-                .where(EntityAlias.normalized_alias == normalized_alias)
-                .distinct()
+                select(TrendEntity).where(TrendEntity.id.in_(matching_entity_ids))
             )
         )
-        named_entities = list(
-            self._session.scalars(
-                select(TrendEntity).where(TrendEntity.normalized_name == normalized_alias)
-            )
-        )
-        return list({entity.id: entity for entity in [*alias_entities, *named_entities]}.values())
+        return alias_entities
 
     def by_wikidata_id(self, wikidata_id: str) -> TrendEntity | None:
         return self._session.scalar(
@@ -41,12 +37,14 @@ class EntityRepository:
         wikidata_id: str | None,
         entity_type: str | None,
         description: str | None = None,
+        entity_types: tuple[str, ...] = (),
     ) -> TrendEntity:
         entity = TrendEntity(
             canonical_name=canonical_name,
             normalized_name=normalized_name,
             wikidata_id=wikidata_id,
             entity_type=entity_type,
+            entity_types=list(entity_types),
             description=description,
             resolution_status=ResolutionStatus.RESOLVED,
             review_status=ReviewStatus.PENDING,
@@ -56,8 +54,18 @@ class EntityRepository:
         self._session.flush()
         return entity
 
-    def add_alias(self, entity_id: int, alias: str, language: str = "und") -> None:
+    def add_alias(
+        self,
+        entity_id: int,
+        alias: str,
+        language: str = "und",
+        *,
+        source: str = "WIKIDATA_ALIAS",
+        approved: bool = False,
+    ) -> None:
         normalized = normalize_text(alias)
+        if not normalized:
+            raise ValueError("entity alias has no normalizable content")
         existing = self._session.scalar(
             select(EntityAlias).where(
                 EntityAlias.entity_id == entity_id,
@@ -72,6 +80,8 @@ class EntityRepository:
                     alias=alias,
                     normalized_alias=normalized,
                     language=language,
+                    source=source,
+                    approved=approved,
                 )
             )
 

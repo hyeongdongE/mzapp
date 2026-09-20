@@ -169,3 +169,11 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
   fallback. Full suite reached 57 passed/4 opt-in skipped.
 - Live pipeline run 2 completed on PostgreSQL `0003`; its legacy entity lacked pre-migration
   description data and therefore correctly persisted the review fallback instead of guessing.
+- The independent entity/classification review found four High ambiguity/provenance/replay risks.
+  The fixes block entity replay until a historical projection exists, require human approval before
+  aliases can short-circuit resolution, reject truncated/conflicting Wikidata matches, preserve
+  partial raw responses, and link every attempt to its raw-fetch IDs.
+- Migration `0004` adds alias trust metadata, complete Wikidata type lists, unique Wikidata IDs, and
+  resolution-attempt provenance. PostgreSQL migration and schema inspection passed.
+- Post-fix verification: 66 tests passed/4 opt-in PostgreSQL tests skipped and Ruff passed. Live
+  pipeline run 5 succeeded and linked official raw fetches 9/10 to its resolution attempt.

@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from app.collectors.http import SafeHttpClient
-from app.collectors.wikidata import WikidataClient
+from app.collectors.wikidata import WikidataClient, WikidataLookupFailed
 
 FIXTURES = Path(__file__).parents[1] / "fixtures"
 ENDPOINT = "https://www.wikidata.org/w/api.php"
@@ -47,3 +47,52 @@ async def test_wikidata_uses_read_only_actions_and_parses_entity_metadata() -> N
     assert result.matches[0].instance_of == ("Q5",)
     assert len(result.raw_responses) == 2
     assert {response.collected_at for response in result.raw_responses} == {acquired_at}
+
+
+@pytest.mark.asyncio
+async def test_wikidata_preserves_search_raw_when_entity_lookup_fails() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.params["action"] == "wbsearchentities":
+            return httpx.Response(
+                200,
+                content=(FIXTURES / "wikidata_search.json").read_bytes(),
+                request=request,
+            )
+        raise httpx.ReadTimeout("timeout", request=request)
+
+    safe_http = SafeHttpClient(
+        httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        allowed_hosts={"www.wikidata.org"},
+        max_bytes=100_000,
+        retries=0,
+    )
+
+    with pytest.raises(WikidataLookupFailed) as raised:
+        await WikidataClient(safe_http, ENDPOINT).lookup("이현중")
+
+    assert raised.value.code == "TIMEOUT"
+    assert len(raised.value.raw_responses) == 1
+
+
+@pytest.mark.asyncio
+async def test_wikidata_preserves_all_raw_when_entity_payload_is_malformed() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.params["action"] == "wbsearchentities":
+            return httpx.Response(200, content=b'{"search":[{"id":"Q1"}]}', request=request)
+        return httpx.Response(200, content=b"{not-json", request=request)
+
+    safe_http = SafeHttpClient(
+        httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        allowed_hosts={"www.wikidata.org"},
+        max_bytes=100_000,
+        retries=0,
+    )
+
+    with pytest.raises(WikidataLookupFailed) as raised:
+        await WikidataClient(safe_http, ENDPOINT).lookup("test")
+
+    assert raised.value.code == "MALFORMED_PAYLOAD"
+    assert [response.raw_bytes for response in raised.value.raw_responses] == [
+        b'{"search":[{"id":"Q1"}]}',
+        b"{not-json",
+    ]
