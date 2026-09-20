@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.ai.evidence import EvidenceBuilder
+from app.ai.summary import SummaryService
 from app.models.enums import (
     CandidateStatus,
     ResolutionStatus,
@@ -14,6 +15,7 @@ from app.models.enums import (
     RunKind,
     RunStatus,
     Source,
+    TrendLifecycle,
 )
 from app.models.tables import (
     CandidateObservation,
@@ -27,11 +29,13 @@ from app.models.tables import (
     SourceObservation,
     TrendCandidate,
     TrendEntity,
+    TrendSnapshot,
 )
 
 AS_OF = datetime(2026, 9, 20, 12, tzinfo=UTC)
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("wikidata_collected_at", "expected_wikidata"),
     [
@@ -39,7 +43,7 @@ AS_OF = datetime(2026, 9, 20, 12, tzinfo=UTC)
         (AS_OF + timedelta(seconds=1), False),
     ],
 )
-def test_builder_preserves_immutable_wikidata_provenance_and_excludes_future_data(
+async def test_builder_preserves_immutable_wikidata_provenance_and_excludes_future_data(
     db_session, wikidata_collected_at: datetime, expected_wikidata: bool
 ) -> None:
     google_run = CollectionRun(
@@ -188,6 +192,18 @@ def test_builder_preserves_immutable_wikidata_provenance_and_excludes_future_dat
             raw_fetch_id=wikidata_fetch.id,
         )
     )
+    snapshot = TrendSnapshot(
+        entity_id=entity.id,
+        pipeline_run_id=pipeline_run.id,
+        as_of=AS_OF,
+        lifecycle=TrendLifecycle.RISING,
+        total_score=80,
+        breakdown={},
+        missing_inputs=[],
+        score_version="score-v1",
+        system_detected_at=AS_OF,
+    )
+    db_session.add(snapshot)
 
     built = EvidenceBuilder(db_session).build(entity, AS_OF)
 
@@ -205,3 +221,16 @@ def test_builder_preserves_immutable_wikidata_provenance_and_excludes_future_dat
         assert wikidata.raw_fetch_id == wikidata_fetch.id
         assert wikidata.fact["wikidata_id"] == "Q1"
         assert wikidata.fact["description"] == "과거 설명"
+    claims = await SummaryService(db_session).generate_top(
+        as_of=AS_OF,
+        top_n=1,
+        prompt_version="prompt-v1",
+        score_version="score-v1",
+    )
+    what_claims = [claim for claim in claims if claim.kind == "WHAT"]
+    if expected_wikidata:
+        assert len(what_claims) == 1
+        assert what_claims[0].text == "테스트 주제: 과거 설명"
+        assert what_claims[0].publishable is True
+    else:
+        assert what_claims == []

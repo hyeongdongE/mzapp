@@ -40,11 +40,13 @@ class EvidenceOnlySummaryProvider:
     async def summarize(self, context: SummaryContext) -> SummaryResult:
         claims: list[ClaimDraft] = []
         wikidata = [row for row in context.evidence if row.kind == "WIKIDATA_ENTITY"]
-        if wikidata and context.description:
+        wikidata_name = wikidata[0].fact.get("canonical_name") if wikidata else None
+        wikidata_description = wikidata[0].fact.get("description") if wikidata else None
+        if isinstance(wikidata_name, str) and isinstance(wikidata_description, str):
             claims.append(
                 ClaimDraft(
                     kind=ClaimKind.WHAT,
-                    text=what_claim_text(context.canonical_name, context.description),
+                    text=what_claim_text(wikidata_name, wikidata_description),
                     evidence_ids=[wikidata[0].id],
                 )
             )

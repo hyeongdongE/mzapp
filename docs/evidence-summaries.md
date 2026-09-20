@@ -57,6 +57,11 @@ The Phase 5 live verification returned `snapshots=0 claims=0 provider=evidence-o
 inspection confirmed zero evidence and claim rows because Phase 4 intentionally suppressed the only
 resolved structural Wikimedia entity. This is an eligible-input result, not a provider failure.
 
-Verification after independent-review fixes: 123 tests passed, 10 opt-in integration tests skipped,
-and Ruff passed. A fresh PostgreSQL database migrated through `0007` and persisted two supported
-claims with exact evidence and snapshot links; the temporary database was removed after inspection.
+Legacy claims that predate snapshot/raw provenance cannot be reconstructed safely. Migration `0008`
+therefore marks any claim without a snapshot link `UNSUPPORTED` and non-publishable and removes its
+cache entry; it never guesses a historical source.
+
+Verification after independent-review fixes: 123 tests passed, 11 opt-in integration tests skipped,
+and Ruff passed. A fresh PostgreSQL database migrated through `0008` and persisted two supported
+claims with exact evidence and snapshot links. A separate `0005 -> 0008` fixture proved a legacy
+publishable WHAT claim is quarantined. Both temporary databases were removed after inspection.

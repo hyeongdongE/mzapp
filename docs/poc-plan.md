@@ -252,7 +252,13 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
   source-specific typed evidence plus database entity linkage, and check relevant contradictions
   across all available evidence. Evidence/claim writes now have unique keys with savepoint recovery;
   empty summaries are cached and every claim use is linked to its exact score snapshot.
-- Post-fix verification: 123 tests passed/10 opt-in integrations skipped; Ruff and diff checks passed.
-  Live PostgreSQL is at migration `0007`. A fresh PostgreSQL database migrated `0001 -> 0007` and
+- Post-fix verification: 123 tests passed/11 opt-in integrations skipped; Ruff and diff checks passed.
+  Live PostgreSQL is at migration `0008`. A fresh PostgreSQL database migrated `0001 -> 0008` and
   persisted supported CAUSE/INTEREST claims with evidence/snapshot links and a completed cache row;
-  the temporary database was removed. Reviewer revalidation pending.
+  the temporary database was removed.
+- Revalidation confirmed the three new-path High findings were closed, then found a legacy-upgrade
+  High: old publishable claims had no recoverable snapshot/raw provenance. Migration `0008` now
+  quarantines every unlinked legacy claim as `UNSUPPORTED`/non-publishable and clears its cache.
+  A real `0005 -> 0008` PostgreSQL fixture verifies that behavior. Historical WHAT rendering now
+  uses the immutable Wikidata evidence fact rather than current entity metadata. Final reviewer
+  revalidation pending.
