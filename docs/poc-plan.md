@@ -261,4 +261,7 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
   quarantines every unlinked legacy claim as `UNSUPPORTED`/non-publishable and clears its cache.
   A real `0005 -> 0008` PostgreSQL fixture verifies that behavior. Historical WHAT rendering now
   uses the immutable Wikidata evidence fact rather than current entity metadata. Final reviewer
-  revalidation pending.
+  revalidation found no Critical, High, or Medium issues and returned `Ready: Yes`. Its Low migration
+  cache/down-up test gap was then closed; concurrent nondeterministic-provider reservation remains a
+  documented precondition before enabling any external provider and does not affect the deterministic,
+  LLM-disabled PoC.

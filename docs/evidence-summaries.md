@@ -65,3 +65,5 @@ Verification after independent-review fixes: 123 tests passed, 11 opt-in integra
 and Ruff passed. A fresh PostgreSQL database migrated through `0008` and persisted two supported
 claims with exact evidence and snapshot links. A separate `0005 -> 0008` fixture proved a legacy
 publishable WHAT claim is quarantined. Both temporary databases were removed after inspection.
+The migration fixture also verifies matching legacy cache deletion and a safe `0008 -> 0007 -> 0008`
+cycle that never restores publication.

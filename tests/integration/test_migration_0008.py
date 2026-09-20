@@ -88,6 +88,21 @@ def test_0008_quarantines_legacy_publishable_claim_without_snapshot_provenance()
         )
     engine.dispose()
 
+    command.upgrade(config, "0007")
+    cache_engine = create_engine(TEST_DATABASE_URL)
+    with cache_engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO summary_cache
+                    (entity_id, prompt_version, evidence_set_hash, claims_count)
+                VALUES (:entity_id, 'prompt-v1', :digest, 1)
+                """
+            ),
+            {"entity_id": entity_id, "digest": "a" * 64},
+        )
+    cache_engine.dispose()
+
     command.upgrade(config, "head")
 
     verification = create_engine(TEST_DATABASE_URL)
@@ -124,4 +139,29 @@ def test_0008_quarantines_legacy_publishable_claim_without_snapshot_provenance()
             text("SELECT count(*) FROM claim_snapshots WHERE claim_id = :claim_id"),
             {"claim_id": claim_id},
         ).scalar_one() == 0
+        assert connection.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM summary_cache
+                WHERE entity_id = :entity_id
+                  AND prompt_version = 'prompt-v1'
+                  AND evidence_set_hash = :digest
+                """
+            ),
+            {"entity_id": entity_id, "digest": "a" * 64},
+        ).scalar_one() == 0
     verification.dispose()
+
+    command.downgrade(config, "0007")
+    command.upgrade(config, "head")
+    after_reupgrade = create_engine(TEST_DATABASE_URL)
+    with after_reupgrade.connect() as connection:
+        claim = connection.execute(
+            text("SELECT status, publishable, reason FROM claims WHERE id = :claim_id"),
+            {"claim_id": claim_id},
+        ).one()
+        assert claim.status == "UNSUPPORTED"
+        assert claim.publishable is False
+        assert claim.reason == "LEGACY_PROVENANCE_UNVERIFIED"
+    after_reupgrade.dispose()
