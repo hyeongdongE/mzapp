@@ -253,28 +253,110 @@ def test_persisted_replay_has_isolated_run_identity(db_session: Session) -> None
     assert snapshot.score_version == "score-replay-persist"
 
 
-def test_replay_digest_covers_all_pipeline_versions(db_session: Session) -> None:
+def test_replay_uses_pre_range_raw_payload_as_baseline_warmup(
+    db_session: Session,
+) -> None:
+    seed_historical_projection(db_session)
+    service = ReplayService(db_session, now=lambda: T0 + timedelta(days=3))
+    without_warmup = service.run(
+        T0_START,
+        T0,
+        score_version="score-replay-warmup",
+        dry_run=True,
+    )
+    warmup_time = T0_START - timedelta(days=10) + timedelta(hours=1)
+    warmup_raw = b"""<?xml version="1.0"?>
+<rss xmlns:ht="https://trends.google.com/trending/rss"><channel><item>
+<title>historical entity</title>
+<pubDate>Thu, 10 Sep 2026 01:00:00 +0000</pubDate>
+<ht:approx_traffic>100+</ht:approx_traffic>
+</item></channel></rss>"""
+    collection = CollectionRun(
+        run_key="replay-google-warmup",
+        source=Source.GOOGLE_TRENDS,
+        started_at=warmup_time,
+        completed_at=warmup_time,
+        status=RunStatus.SUCCEEDED,
+    )
+    payload = RawPayload(
+        source=Source.GOOGLE_TRENDS,
+        payload_hash=hashlib.sha256(warmup_raw).hexdigest(),
+        raw_payload={
+            "content_encoding": "base64",
+            "data": base64.b64encode(warmup_raw).decode("ascii"),
+        },
+        collected_at=warmup_time,
+        source_timestamp=warmup_time,
+        collector_version="test",
+        parser_version="google-rss-parser-v1",
+    )
+    db_session.add_all([collection, payload])
+    db_session.flush()
+    db_session.add(
+        RawFetch(
+            run_id=collection.id,
+            raw_payload_id=payload.id,
+            request_url="https://trends.google.com/trending/rss?geo=KR",
+            collected_at=warmup_time,
+            source_timestamp=warmup_time,
+            collector_version="test",
+            parser_version="google-rss-parser-v1",
+        )
+    )
+    db_session.commit()
+
+    with_warmup = service.run(
+        T0_START,
+        T0,
+        score_version="score-replay-warmup",
+        dry_run=True,
+    )
+
+    assert without_warmup.snapshot_count == 2
+    assert with_warmup.snapshot_count == 0
+    assert with_warmup.snapshot_digest != without_warmup.snapshot_digest
+
+
+def test_replay_rejects_unimplemented_pipeline_version(db_session: Session) -> None:
     seed_historical_projection(db_session)
     service = ReplayService(db_session, now=lambda: T0 + timedelta(days=3))
 
+    with pytest.raises(ValueError, match="unsupported normalizer_version"):
+        service.run(
+            T0_START,
+            T0,
+            score_version="score-replay-versions",
+            normalizer_version="normalizer-v2",
+            dry_run=True,
+        )
+
+    assert db_session.scalar(select(func.count()).select_from(TrendSnapshot)) == 0
+
+
+def test_replay_digest_covers_fetch_identity_and_acquisition_time(
+    db_session: Session,
+) -> None:
+    seed_historical_projection(db_session)
+    service = ReplayService(db_session, now=lambda: T0 + timedelta(days=3))
     first = service.run(
         T0_START,
         T0,
-        score_version="score-replay-versions",
-        normalizer_version="normalizer-a",
+        score_version="score-replay-provenance",
         dry_run=True,
     )
+    raw_fetch = db_session.scalar(select(RawFetch))
+    assert raw_fetch is not None
+    raw_fetch.collected_at += timedelta(minutes=1)
+    db_session.commit()
+
     second = service.run(
         T0_START,
         T0,
-        score_version="score-replay-versions",
-        normalizer_version="normalizer-b",
+        score_version="score-replay-provenance",
         dry_run=True,
     )
 
     assert first.snapshot_digest != second.snapshot_digest
-    assert first.snapshot_count == 2
-    assert db_session.scalar(select(func.count()).select_from(TrendSnapshot)) == 0
 
 
 def test_persisted_replay_rejects_existing_live_snapshot_version(

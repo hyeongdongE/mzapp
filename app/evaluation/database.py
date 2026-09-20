@@ -349,6 +349,7 @@ def evaluate_day(session: Session, day: date) -> DailyEvaluation:
                 HumanEvaluation.created_at >= start,
                 HumanEvaluation.created_at < end,
             )
+            .order_by(HumanEvaluation.created_at, HumanEvaluation.id)
         )
     )
     latest_evaluations: dict[tuple[int, str], HumanEvaluation] = {}
@@ -543,6 +544,9 @@ def evaluate_day(session: Session, day: date) -> DailyEvaluation:
             duplicate_items=duplicates,
             noise_items=noise,
             news_only_items=news_only,
+            usable_rate=_rate(
+                category_labels.count(HumanEvaluationLabel.VALID_TREND), reviewed
+            ),
             duplicate_rate=_rate(duplicates, reviewed),
             noise_rate=_rate(noise, reviewed),
             news_only_rate=_rate(news_only, reviewed),

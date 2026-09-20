@@ -10,6 +10,8 @@ Replay never calls Wikidata or any other external source. It verifies and decode
 bytes again, and normalizes the parsed item text. Candidate-to-entity links come from the latest
 successful **LIVE** `EntityResolutionAttempt` known at each cutoff, never the mutable current link.
 Future payloads and future resolution decisions therefore cannot alter a historical digest.
+Raw input starts 32 days before `--from` to warm the scorer baseline, while derived snapshots still
+start at `--from`. Warm-up fetches and their URL/timestamps are included in the digest provenance.
 
 ```powershell
 uv run python scripts/replay.py `
@@ -31,7 +33,9 @@ of silently attaching another run to that row. Review and human-evaluation recor
 
 The replay advances in six-hour cutoffs and uses only snapshots created earlier in that same replay
 run for lifecycle state. This makes HOT/COOLING history independent of pre-existing database
-snapshots and run order. A new algorithm must use a new `score_version`.
+snapshots and run order. Normalizer/entity/classifier/prompt replay versions are currently restricted
+to the implemented `*-v1` values; unsupported labels fail instead of misrepresenting the code used.
+A new scoring algorithm must use a new `score_version`.
 
 ## Scheduler
 
@@ -61,12 +65,12 @@ process for this PoC.
 ## Observed replay smoke (2026-09-21)
 
 Range `2026-09-18T00:00Z` through `2026-09-21T00:00Z`, version
-`score-replay-raw-v2`:
+`score-replay-warmup-v3`:
 
 ```text
-dry-run snapshots=2 digest=09462f0839929735fdee3943c7f91150705425899431c60808fc01fdd832bf13
-run_id=17 snapshots=2 digest=09462f0839929735fdee3943c7f91150705425899431c60808fc01fdd832bf13
+dry-run snapshots=2 digest=f118099aaa0d3df45365165299dffa8d99cfd718ae19612abb0492c1e7ef2de2
+run_id=19 snapshots=2 digest=f118099aaa0d3df45365165299dffa8d99cfd718ae19612abb0492c1e7ef2de2
 ```
 
-PostgreSQL stored run 17 as `REPLAY / SUCCEEDED`. Its two snapshots are ordered at 18:00 and 00:00
+PostgreSQL stored run 19 as `REPLAY / SUCCEEDED`. Its two snapshots are ordered at 18:00 and 00:00
 UTC and both are `NEW` with the same explainable score; dry-run and persisted digests matched.

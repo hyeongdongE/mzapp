@@ -14,7 +14,7 @@ a probability. Every zero denominator is rendered as `N/A`, never as `0%`.
 | Trend entities | Distinct entities with a successful LIVE snapshot whose `as_of` is during the day |
 | Approved cards | Entities reviewed that day whose final review state at period end is `APPROVE` |
 | Category raw/entities | Acquisition-cohort observations and historically resolved entities by category |
-| Category valid/usable | Final approved cards / latest human `VALID_TREND` adjudications |
+| Category valid/usable | Final approved cards / latest human `VALID_TREND` adjudications; usable rate uses reviewed adjudications as denominator |
 | Precision | `VALID_TREND / latest per-entity-and-actor human adjudications` |
 | Duplicate rate | `DUPLICATE / latest per-entity-and-actor human adjudications` |
 | Noise rate | `(TOO_OBVIOUS + NEWS_ONLY + NOT_USEFUL) / all human evaluation records` |

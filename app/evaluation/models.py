@@ -46,6 +46,7 @@ class CategoryCoverage:
     duplicate_items: int = 0
     noise_items: int = 0
     news_only_items: int = 0
+    usable_rate: Decimal | None = None
     duplicate_rate: Decimal | None = None
     noise_rate: Decimal | None = None
     news_only_rate: Decimal | None = None

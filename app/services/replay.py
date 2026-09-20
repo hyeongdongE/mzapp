@@ -24,7 +24,7 @@ from app.models.tables import (
     TrendSnapshot,
 )
 from app.pipeline.baseline import SignalPoint
-from app.pipeline.detection import TrendDetector
+from app.pipeline.detection import BASELINE_LOOKBACK, TrendDetector
 from app.pipeline.normalization import normalize_text
 from app.services.pipeline import PipelineVersions
 
@@ -54,6 +54,18 @@ class ReplayResult:
 class _ReplayInput:
     candidate_id: int
     point: SignalPoint
+
+
+@dataclass(frozen=True, order=True)
+class _RawProvenance:
+    source: str
+    raw_fetch_id: int
+    request_url: str
+    collected_at: str
+    source_timestamp: str | None
+    collector_version: str
+    parser_version: str
+    payload_hash: str
 
 
 def _validate_range(from_: datetime, to: datetime) -> None:
@@ -97,8 +109,17 @@ class ReplayService:
         )
         if any(not value.strip() for value in asdict(versions).values()):
             raise ValueError("replay versions must be non-empty")
+        supported = PipelineVersions(score=score_version)
+        for field in ("normalizer", "entity", "classifier", "prompt"):
+            if getattr(versions, field) != getattr(supported, field):
+                raise ValueError(
+                    f"unsupported {field}_version {getattr(versions, field)!r}; "
+                    f"only {getattr(supported, field)!r} is implemented"
+                )
 
-        raw_provenance, replay_inputs = self._reparse_inputs(from_, to)
+        raw_provenance, replay_inputs = self._reparse_inputs(
+            from_ - BASELINE_LOOKBACK, to
+        )
         transaction = self._session.begin_nested() if dry_run else None
         try:
             result = self._execute(from_, to, versions, raw_provenance, replay_inputs, dry_run)
@@ -115,7 +136,7 @@ class ReplayService:
         from_: datetime,
         to: datetime,
         versions: PipelineVersions,
-        raw_provenance: tuple[tuple[str, str, str, str], ...],
+        raw_provenance: tuple[_RawProvenance, ...],
         replay_inputs: list[_ReplayInput],
         dry_run: bool,
     ) -> ReplayResult:
@@ -185,7 +206,7 @@ class ReplayService:
 
     def _reparse_inputs(
         self, from_: datetime, to: datetime
-    ) -> tuple[tuple[tuple[str, str, str, str], ...], list[_ReplayInput]]:
+    ) -> tuple[tuple[_RawProvenance, ...], list[_ReplayInput]]:
         rows = self._session.execute(
             select(RawFetch, RawPayload)
             .join(RawPayload, RawPayload.id == RawFetch.raw_payload_id)
@@ -204,7 +225,7 @@ class ReplayService:
         ):
             candidate_index[(candidate.source, candidate.normalized_text)] = candidate
 
-        raw_provenance: list[tuple[str, str, str, str]] = []
+        raw_provenance: list[_RawProvenance] = []
         result: list[_ReplayInput] = []
         for raw_fetch, payload in rows:
             raw_bytes = _raw_bytes(payload)
@@ -212,18 +233,29 @@ class ReplayService:
             if digest != payload.payload_hash:
                 raise InvalidRawPayload(f"raw payload hash mismatch for payload {payload.id}")
             raw_provenance.append(
-                (
-                    payload.source.value,
-                    raw_fetch.collector_version,
-                    raw_fetch.parser_version,
-                    digest,
+                _RawProvenance(
+                    source=payload.source.value,
+                    raw_fetch_id=raw_fetch.id,
+                    request_url=raw_fetch.request_url,
+                    collected_at=_utc(raw_fetch.collected_at).isoformat(),
+                    source_timestamp=(
+                        _utc(raw_fetch.source_timestamp).isoformat()
+                        if raw_fetch.source_timestamp is not None
+                        else None
+                    ),
+                    collector_version=raw_fetch.collector_version,
+                    parser_version=raw_fetch.parser_version,
+                    payload_hash=digest,
                 )
             )
             for item in _parse_payload(payload.source, raw_bytes, raw_fetch):
                 normalized = normalize_text(item.canonical_text)
                 candidate = candidate_index.get((payload.source, normalized))
                 if candidate is None:
-                    continue
+                    raise InvalidRawPayload(
+                        "parsed replay item has no normalized candidate: "
+                        f"{payload.source.value}/{normalized}"
+                    )
                 point = _to_point(item, candidate.id, normalized, payload.source)
                 result.append(_ReplayInput(candidate.id, point))
         return tuple(sorted(raw_provenance)), result
@@ -274,8 +306,14 @@ def _raw_bytes(payload: RawPayload) -> bytes:
         raise InvalidRawPayload(f"raw payload {payload.id} has invalid base64") from exc
 
 
+def _utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
 def _parse_payload(source: Source, raw_bytes: bytes, raw_fetch: RawFetch) -> list[SourceItem]:
-    observed_at = raw_fetch.collected_at.astimezone(UTC)
+    observed_at = _utc(raw_fetch.collected_at)
     if source is Source.GOOGLE_TRENDS:
         if raw_fetch.parser_version != "google-rss-parser-v1":
             raise InvalidRawPayload(f"unsupported Google parser version {raw_fetch.parser_version}")
@@ -322,7 +360,7 @@ def _snapshot_digest(
     from_: datetime,
     to: datetime,
     versions: PipelineVersions,
-    raw_provenance: tuple[tuple[str, str, str, str], ...],
+    raw_provenance: tuple[_RawProvenance, ...],
     snapshots: list[TrendSnapshot],
 ) -> str:
     rows = [
@@ -341,7 +379,7 @@ def _snapshot_digest(
             "from": from_.isoformat(),
             "to": to.isoformat(),
             "versions": asdict(versions),
-            "raw_payloads": raw_provenance,
+            "raw_payloads": [asdict(item) for item in raw_provenance],
             "snapshots": rows,
         },
         ensure_ascii=False,

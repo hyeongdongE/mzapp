@@ -323,11 +323,11 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
   resolution and review mappings, bounds cross-source facts to the day, deduplicates adjudications,
   adds per-category quality/supply facts, and renders uncollected cost as `N/A`.
 - Real PostgreSQL replay of `2026-09-18T00:00Z..2026-09-21T00:00Z` produced identical dry-run and
-  persisted digest `09462f0839929735fdee3943c7f91150705425899431c60808fc01fdd832bf13`, storing
-  run 17 with two ordered snapshots.
+  persisted digest `f118099aaa0d3df45365165299dffa8d99cfd718ae19612abb0492c1e7ef2de2`, storing
+  warm-up-aware run 19 with two ordered snapshots.
 - Added exact Docker/native runbooks plus operations, security, evaluation-guide, and final-status
   documentation. Real LLM and Meta calls remain disabled.
-- Fresh local verification after reviewer fixes: 165 passed/13 opt-in integrations skipped; Ruff
+- Fresh local verification after reviewer fixes: 167 passed/13 opt-in integrations skipped; Ruff
   passed. A fresh PostgreSQL `0001 -> 0008` database passed 11 non-migration integration tests.
   A fresh PostgreSQL `0001 -> 0008` database then passed 11 non-migration integration tests, and
   three separate temporary databases passed the `0002`, `0005`, and `0008` migration fixtures.

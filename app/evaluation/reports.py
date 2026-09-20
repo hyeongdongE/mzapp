@@ -68,8 +68,8 @@ def _render_body(result: DailyEvaluation | WeeklyEvaluation) -> list[str]:
         "## Category coverage",
         "",
         "| Category | Raw | Unique entities | Valid cards | Reviewed | Usable | "
-        "Duplicate | Noise | News-only |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "Usable rate | Duplicate | Noise | News-only |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for category in Category:
         category_metrics = result.coverage[category]
@@ -77,6 +77,7 @@ def _render_body(result: DailyEvaluation | WeeklyEvaluation) -> list[str]:
             f"| {category.value} | {category_metrics.raw_candidates} | "
             f"{category_metrics.candidates} | {category_metrics.valid_cards} | "
             f"{category_metrics.reviewed} | {category_metrics.usable_cards} | "
+            f"{_format_rate(category_metrics.usable_rate)} | "
             f"{_format_rate(category_metrics.duplicate_rate)} | "
             f"{_format_rate(category_metrics.noise_rate)} | "
             f"{_format_rate(category_metrics.news_only_rate)} |"
@@ -226,6 +227,11 @@ def aggregate_week(days: Sequence[DailyEvaluation], *, week_number: int) -> Week
             duplicate_items=duplicate_count,
             noise_items=noise_count,
             news_only_items=news_count,
+            usable_rate=(
+                Decimal(sum(value.usable_cards for value in values)) / reviewed
+                if reviewed
+                else None
+            ),
             duplicate_rate=(Decimal(duplicate_count) / reviewed if reviewed else None),
             noise_rate=(Decimal(noise_count) / reviewed if reviewed else None),
             news_only_rate=(Decimal(news_count) / reviewed if reviewed else None),

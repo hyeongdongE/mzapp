@@ -219,6 +219,7 @@ def test_evaluate_day_reads_period_facts_without_future_rows(db_session: Session
     assert result.coverage[Category.SPORTS].valid_cards == 1
     assert result.coverage[Category.SPORTS].raw_candidates == 2
     assert result.coverage[Category.SPORTS].usable_cards == 1
+    assert result.coverage[Category.SPORTS].usable_rate == Decimal("1.0000")
     assert result.cost.recorded is True
     assert result.quality.precision == Decimal("1.0000")
     assert result.quality.unsupported_summary_rate == Decimal("1.0000")

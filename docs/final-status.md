@@ -86,7 +86,7 @@ Redis, search cluster, microservice split, CQRS, or production-only infrastructu
 | 17 | Raw replay | Raw decode/reparse, historical projection, six-hour history, version/hash digest tests |
 | 18 | Future Meta interface | `TrendValidationProvider` and named disabled providers |
 | 19 | Works without Meta | Full test/pipeline paths use disabled providers |
-| 20 | Tests pass | 165 local tests plus PostgreSQL/migration integrations; fresh evidence in `docs/poc-plan.md` |
+| 20 | Tests pass | 167 local tests plus PostgreSQL/migration integrations; fresh evidence in `docs/poc-plan.md` |
 | 21 | README local run | Exact Docker and native PowerShell commands in `README.md` |
 
 ## Current evaluation
