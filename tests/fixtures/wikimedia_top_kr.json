@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "country": "KR",
+      "access": "all-access",
+      "year": "2026",
+      "month": "09",
+      "day": "18",
+      "articles": [
+        {
+          "article": "위키백과:대문",
+          "project": "ko.wikipedia",
+          "views_ceil": 19900,
+          "rank": 1
+        },
+        {
+          "article": "이현중_(농구_선수)",
+          "project": "ko.wikipedia",
+          "views_ceil": 2500,
+          "rank": 12
+        }
+      ]
+    }
+  ]
+}

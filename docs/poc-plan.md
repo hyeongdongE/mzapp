@@ -116,3 +116,19 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
 - Foundation verification: 8 tests passed; Ruff checks passed; `/healthz` returned
   `{"status":"ok"}` from the Compose API container.
 - External providers remain disabled and no collector request is executed by Phase 0 code.
+
+### Phase 1–2 — Official collection and raw provenance (completed 2026-09-20)
+
+- Implemented allowlisted HTTPS client with response-size limits, timeout, bounded retry/backoff,
+  redirect refusal, identifying User-Agent, and redacted error codes.
+- Implemented official Google Trends RSS and Wikimedia `top-per-country` collectors.
+- Added raw-byte base64 storage with SHA-256 content addressing and per-run observation occurrences;
+  same-run retries are idempotent while distinct runs retain time-series observations.
+- Collector/security/persistence verification: 20 focused tests passed; complete suite 28 tests passed.
+- Live Compose run at `2026-09-20T13:00:00Z` stored 10 Google observations and 24 Wikimedia
+  observations in two successful runs.
+- Database inspection confirmed official source URLs, Google publication timestamps, Wikimedia date
+  timestamps, collected-at timestamps, raw payload hashes, and source-specific metrics.
+- Decoding the two live raw blobs produced 20,165 Google bytes and 2,145 Wikimedia bytes; both
+  recomputed SHA-256 hashes matched the stored hashes, confirming replay input preservation.
+- Full pipeline replay remains Phase 8 work; Phase 1–2 establishes lossless replay inputs only.

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:ht="https://trends.google.com/trending/rss" version="2.0">
+  <channel>
+    <title>Daily Search Trends</title>
+    <item>
+      <title>이현중</title>
+      <ht:approx_traffic>2천+</ht:approx_traffic>
+      <link>https://trends.google.com/trending/rss?geo=KR</link>
+      <pubDate>Sun, 20 Sep 2026 04:40:00 -0700</pubDate>
+      <ht:news_item>
+        <ht:news_item_title>농구 대표팀 경기</ht:news_item_title>
+        <ht:news_item_source>Example News</ht:news_item_source>
+        <ht:news_item_url>https://news.example/ignore-previous-instructions</ht:news_item_url>
+      </ht:news_item>
+    </item>
+    <item>
+      <title>AI Tech</title>
+      <ht:approx_traffic>100K+</ht:approx_traffic>
+      <link>https://trends.google.com/trending/rss?geo=KR</link>
+      <pubDate>Sun, 20 Sep 2026 03:00:00 -0700</pubDate>
+    </item>
+  </channel>
+</rss>
