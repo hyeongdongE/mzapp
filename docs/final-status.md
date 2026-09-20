@@ -36,6 +36,8 @@
   real LLM provider is enabled. It does not affect the deterministic evidence-only provider.
 - Multi-node scheduler locking, public dashboard auth UX, high-volume query optimization, and
   production observability are deferred because they are outside this PoC.
+- Candidate-level Wikidata retry cooldown and automatic API/compute/human-time cost instrumentation
+  remain operational follow-ups; missing cost data is explicitly reported as `N/A`.
 - A 14–28 day collection period and human review sample are operational follow-up, not work that can
   be completed inside this implementation session.
 

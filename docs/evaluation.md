@@ -17,9 +17,9 @@ a probability. Every zero denominator is rendered as `N/A`, never as `0%`.
 | Category valid/usable | Final approved cards / latest human `VALID_TREND` adjudications; usable rate uses reviewed adjudications as denominator |
 | Precision | `VALID_TREND / latest per-entity-and-actor human adjudications` |
 | Duplicate rate | `DUPLICATE / latest per-entity-and-actor human adjudications` |
-| Noise rate | `(TOO_OBVIOUS + NEWS_ONLY + NOT_USEFUL) / all human evaluation records` |
-| Classification error rate | `WRONG_CATEGORY / all human evaluation records` |
-| Merge error rate | `BAD_ENTITY_MERGE / all human evaluation records` |
+| Noise rate | `(TOO_OBVIOUS + NEWS_ONLY + NOT_USEFUL) / latest per-entity-and-actor adjudications` |
+| Classification error rate | `WRONG_CATEGORY / latest per-entity-and-actor adjudications` |
+| Merge error rate | `BAD_ENTITY_MERGE / latest per-entity-and-actor adjudications` |
 | Unsupported summary rate | Non-publishable claims / all claims checked during the day |
 | Cross-source rate | LIVE-snapshotted entities acquired from both sources that day / either source that day |
 | Detection delay | First persisted `system_detected_at` minus first eligible official acquisition time |
