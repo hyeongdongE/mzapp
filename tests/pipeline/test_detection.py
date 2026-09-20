@@ -203,6 +203,32 @@ def test_high_score_history_requires_actual_six_hour_persistence() -> None:
     assert duration == 6
 
 
+def test_low_score_breaks_high_score_tail() -> None:
+    history = [
+        SimpleNamespace(as_of=AS_OF - timedelta(hours=2), total_score=90),
+        SimpleNamespace(as_of=AS_OF - timedelta(hours=1), total_score=60),
+    ]
+
+    windows, duration = _high_score_state(history, AS_OF, 90)
+
+    assert windows == 1
+    assert duration == 0
+
+
+def test_sampling_gap_over_tolerance_breaks_high_score_tail() -> None:
+    history = [
+        SimpleNamespace(
+            as_of=AS_OF - timedelta(hours=6, minutes=5, seconds=1),
+            total_score=90,
+        )
+    ]
+
+    windows, duration = _high_score_state(history, AS_OF, 90)
+
+    assert windows == 1
+    assert duration == 0
+
+
 def _add_observation(
     db_session,
     *,
