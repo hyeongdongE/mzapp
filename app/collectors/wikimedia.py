@@ -57,6 +57,18 @@ class WikimediaTopPagesCollector:
         )
 
     def _parse(self, raw_bytes: bytes, observed_at: datetime, source_url: str) -> list[SourceItem]:
+        return parse_wikimedia_top_pages(raw_bytes, observed_at, source_url)
+
+
+def parse_wikimedia_top_pages(
+    raw_bytes: bytes, observed_at: datetime, source_url: str
+) -> list[SourceItem]:
+    """Parse a stored Wikimedia payload without performing network I/O."""
+    return _WikimediaParser().parse(raw_bytes, observed_at, source_url)
+
+
+class _WikimediaParser:
+    def parse(self, raw_bytes: bytes, observed_at: datetime, source_url: str) -> list[SourceItem]:
         try:
             payload = json.loads(raw_bytes)
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:

@@ -188,6 +188,8 @@ class TrendDetector:
         from_: datetime,
         pipeline_run_id: int,
         persist: bool,
+        points: list[SignalPoint] | None = None,
+        history_pipeline_run_id: int | None = None,
     ) -> TrendSnapshot | None:
         if (
             as_of.tzinfo is None
@@ -204,6 +206,8 @@ class TrendDetector:
             candidate_ids=candidate_ids,
             minimum_timestamp=from_,
             persist=persist,
+            points_override=points,
+            history_pipeline_run_id=history_pipeline_run_id,
         )
 
     def _snapshot(
@@ -215,6 +219,8 @@ class TrendDetector:
         candidate_ids: tuple[int, ...] | None,
         minimum_timestamp: datetime | None,
         persist: bool,
+        points_override: list[SignalPoint] | None = None,
+        history_pipeline_run_id: int | None = None,
     ) -> TrendSnapshot | None:
         if persist:
             existing = self._session.scalar(
@@ -226,17 +232,19 @@ class TrendDetector:
             )
             if existing is not None:
                 return existing
-        points = self._points(
-            entity_id,
-            as_of,
-            candidate_ids=candidate_ids,
-            minimum_timestamp=minimum_timestamp,
-        )
+        points = points_override
+        if points is None:
+            points = self._points(
+                entity_id,
+                as_of,
+                candidate_ids=candidate_ids,
+                minimum_timestamp=minimum_timestamp,
+            )
         features = FeatureExtractor().extract(points, as_of)
         score = ExplainableScorer().score(
             features.signal, missing_inputs=features.missing_inputs
         )
-        previous = self._session.scalar(
+        previous_statement = (
             select(TrendSnapshot)
             .where(
                 TrendSnapshot.entity_id == entity_id,
@@ -245,9 +253,8 @@ class TrendDetector:
             )
             .order_by(TrendSnapshot.as_of.desc())
         )
-        recent_snapshots = list(
-            self._session.scalars(
-                select(TrendSnapshot)
+        recent_statement = (
+            select(TrendSnapshot)
                 .where(
                     TrendSnapshot.entity_id == entity_id,
                     TrendSnapshot.as_of < as_of,
@@ -255,8 +262,16 @@ class TrendDetector:
                     TrendSnapshot.score_version == self._score_version,
                 )
                 .order_by(TrendSnapshot.as_of)
-            )
         )
+        if history_pipeline_run_id is not None:
+            previous_statement = previous_statement.where(
+                TrendSnapshot.pipeline_run_id == history_pipeline_run_id
+            )
+            recent_statement = recent_statement.where(
+                TrendSnapshot.pipeline_run_id == history_pipeline_run_id
+            )
+        previous = self._session.scalar(previous_statement)
+        recent_snapshots = list(self._session.scalars(recent_statement))
         high_windows, high_duration = _high_score_state(
             recent_snapshots, as_of, score.total
         )

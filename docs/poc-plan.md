@@ -306,10 +306,10 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
 
 ### Phase 8 — Replay, scheduler, end-to-end operations (implementation complete 2026-09-21)
 
-- Added cutoff-safe replay using immutable successful live resolution attempts rather than mutable
-  current entity links. Date-only ranges cover complete UTC days; both source and acquisition times
-  must be inside the range. Dry-run is write-free, while persisted runs retain `REPLAY` identity,
-  exact versions, derived snapshots, and a canonical digest.
+- Added cutoff-safe replay that verifies and reparses official raw bytes, re-runs text normalization,
+  uses immutable successful live resolution attempts rather than mutable current entity links, and
+  advances through six-hour cutoffs using only same-run lifecycle history. Dry-run is write-free;
+  persisted runs retain `REPLAY` identity, all versions, raw/parser provenance, snapshots, and digest.
 - A future-observation/current-relink regression produced the same dry-run digest. Persisted replay
   refuses to reuse a snapshot owned by another run and requires a new score version.
 - Added a single-process Asia/Seoul scheduler with stable job IDs, hourly Google collection, delayed
@@ -319,13 +319,16 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
   normalization, classification, scoring, evidence summary, approval, human evaluation, and report
   rendering in one flow. The PostgreSQL fixture database migrated `0001 -> 0008`, passed, rolled back
   its data, and was removed.
-- Real PostgreSQL replay of `2026-09-18..2026-09-20` produced identical dry-run/persisted digest
-  `72072fe107bfd9c4ae1dfab25d47b93bad0727fc8030da7dcb11877958bb16f2` and stored run 13 as
-  `REPLAY / SUCCEEDED`. Zero snapshots was the expected conservative result for the structural-only
-  resolved live entity.
+- Reviewer hardening changed evaluation to an acquisition-day cohort, reconstructs historical
+  resolution and review mappings, bounds cross-source facts to the day, deduplicates adjudications,
+  adds per-category quality/supply facts, and renders uncollected cost as `N/A`.
+- Real PostgreSQL replay of `2026-09-18T00:00Z..2026-09-21T00:00Z` produced identical dry-run and
+  persisted digest `09462f0839929735fdee3943c7f91150705425899431c60808fc01fdd832bf13`, storing
+  run 17 with two ordered snapshots.
 - Added exact Docker/native runbooks plus operations, security, evaluation-guide, and final-status
   documentation. Real LLM and Meta calls remain disabled.
-- Fresh local verification: 162 passed/13 opt-in integrations skipped; Ruff and diff checks passed.
+- Fresh local verification after reviewer fixes: 165 passed/13 opt-in integrations skipped; Ruff
+  passed. A fresh PostgreSQL `0001 -> 0008` database passed 11 non-migration integration tests.
   A fresh PostgreSQL `0001 -> 0008` database then passed 11 non-migration integration tests, and
   three separate temporary databases passed the `0002`, `0005`, and `0008` migration fixtures.
   All temporary databases were removed. Final Docker builds succeeded; API health/candidate routes

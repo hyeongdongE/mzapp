@@ -52,6 +52,21 @@ class GoogleTrendsRssCollector:
         )
 
     def _parse(self, raw_bytes: bytes, observed_at: datetime) -> list[SourceItem]:
+        return parse_google_trends_rss(raw_bytes, observed_at, self._url)
+
+
+def parse_google_trends_rss(
+    raw_bytes: bytes, observed_at: datetime, fallback_url: str
+) -> list[SourceItem]:
+    """Parse a stored Google Trends payload without performing network I/O."""
+    return _GoogleTrendsParser(fallback_url).parse(raw_bytes, observed_at)
+
+
+class _GoogleTrendsParser:
+    def __init__(self, fallback_url: str) -> None:
+        self._url = fallback_url
+
+    def parse(self, raw_bytes: bytes, observed_at: datetime) -> list[SourceItem]:
         try:
             root = ElementTree.fromstring(raw_bytes, forbid_dtd=True, forbid_entities=True)
         except (ParseError, DefusedXmlException, ValueError) as exc:

@@ -33,12 +33,22 @@ class SupplyMetrics:
     unique_candidates: int
     trend_entities: int
     approved_cards: int
+    source_day_candidates: int = 0
 
 
 @dataclass(frozen=True)
 class CategoryCoverage:
     candidates: int
     valid_cards: int
+    raw_candidates: int = 0
+    reviewed: int = 0
+    usable_cards: int = 0
+    duplicate_items: int = 0
+    noise_items: int = 0
+    news_only_items: int = 0
+    duplicate_rate: Decimal | None = None
+    noise_rate: Decimal | None = None
+    news_only_rate: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -86,6 +96,7 @@ class CostMetrics:
     human_minutes: int
     cost_per_approved_card: Decimal | None
     by_type: dict[str, Decimal]
+    recorded: bool = True
 
 
 @dataclass(frozen=True)

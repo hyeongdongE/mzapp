@@ -9,29 +9,34 @@ a probability. Every zero denominator is rendered as `N/A`, never as `0%`.
 | Metric | Definition |
 |---|---|
 | Raw candidates | Google Trends and Wikimedia source observations acquired during the UTC day |
-| Unique candidates | `trend_candidates` whose source-derived `first_seen_at` is during the day |
-| Trend entities | Distinct entities with a trend snapshot whose `as_of` is during the day |
-| Approved cards | Distinct entities receiving an `APPROVE` review during the day |
-| Category candidates | Distinct snapshotted or approved entities assigned to the category as of period end |
-| Category valid cards | Those category entities approved during the day |
-| Precision | `VALID_TREND / all human evaluation records` |
-| Duplicate rate | `DUPLICATE / all human evaluation records` |
+| Unique entities | Distinct historically resolved entities linked to observations acquired that day |
+| Source-day candidates | Diagnostic count linked to source timestamps; kept separate from acquisition supply |
+| Trend entities | Distinct entities with a successful LIVE snapshot whose `as_of` is during the day |
+| Approved cards | Entities reviewed that day whose final review state at period end is `APPROVE` |
+| Category raw/entities | Acquisition-cohort observations and historically resolved entities by category |
+| Category valid/usable | Final approved cards / latest human `VALID_TREND` adjudications |
+| Precision | `VALID_TREND / latest per-entity-and-actor human adjudications` |
+| Duplicate rate | `DUPLICATE / latest per-entity-and-actor human adjudications` |
 | Noise rate | `(TOO_OBVIOUS + NEWS_ONLY + NOT_USEFUL) / all human evaluation records` |
 | Classification error rate | `WRONG_CATEGORY / all human evaluation records` |
 | Merge error rate | `BAD_ENTITY_MERGE / all human evaluation records` |
 | Unsupported summary rate | Non-publishable claims / all claims checked during the day |
-| Cross-source rate | Snapshotted entities observed in both Google Trends and Wikimedia / entities observed in either |
+| Cross-source rate | LIVE-snapshotted entities acquired from both sources that day / either source that day |
 | Detection delay | First persisted `system_detected_at` minus first eligible official acquisition time |
 | Approval delay | First approval time minus the entity's original detection time |
 | Total cost | Stored amount plus `human_minutes / 60 * metadata_json.hourly_rate`, USD only |
 | Cost per approved card | Total cost / approved cards |
 
 Category is reconstructed from the last classification or audited `CHANGE_CATEGORY` action before
-period end. Source observations and entity links are also cutoff at period end. A day is marked
-complete only when both Google Trends and Wikimedia have a successful collection run that day.
+period end. Entity links are reconstructed from successful LIVE resolution attempts, followed by
+MERGE/SPLIT reviews that existed before the cutoff; current mutable links cannot rewrite history.
+A day is marked complete only when both Google Trends and Wikimedia have a successful acquisition
+run that day. The scheduler refreshes D-2 after delayed Wikimedia arrives.
 
 Freshness reports nearest-rank P50 and P95. Negative intervals are rejected as data integrity errors.
 Mixed/non-USD cost records are rejected instead of being silently combined without exchange rates.
+When no cost rows were collected, the report explicitly says `Cost data recorded: No` and renders
+cost as `N/A`, not zero.
 
 ## Weekly aggregation
 
@@ -61,9 +66,8 @@ reports/week-01.md
 
 ## Phase verification (2026-09-21)
 
-- Evaluation/report/CLI focused suite: 14 passed.
-- Real PostgreSQL daily report for 2026-09-20: official collection complete, 68 raw observations,
-  seven unique candidates, zero trend entities, and zero approved cards.
+- Real PostgreSQL daily report for 2026-09-20 uses acquisition-day supply and separately shows the
+  source-day diagnostic. Category supply/quality rows include zero denominators explicitly.
 - All categories had zero valid cards. Quality, cross-source, freshness, and cost-per-card
   denominators were unavailable and rendered `N/A`.
 - Week 01 (`2026-09-20` through `2026-09-26`) aggregated the same facts but counted only one

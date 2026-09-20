@@ -106,7 +106,7 @@ async def exercise_end_to_end(session: Session) -> str:
     report = render_daily_markdown(result)
     assert result.complete_day is True
     assert result.supply.raw_candidates - before.supply.raw_candidates == 4
-    assert result.supply.unique_candidates - before.supply.unique_candidates == 2
+    assert result.supply.unique_candidates - before.supply.unique_candidates == 4
     assert result.supply.trend_entities - before.supply.trend_entities == 2
     assert result.supply.approved_cards - before.supply.approved_cards == 1
     assert result.quality.valid_trends - before.quality.valid_trends == 1

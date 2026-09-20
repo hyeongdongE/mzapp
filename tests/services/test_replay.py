@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -21,6 +23,7 @@ from app.models.tables import (
     EntityCandidate,
     EntityResolutionAttempt,
     PipelineRun,
+    RawFetch,
     RawPayload,
     SourceObservation,
     TrendCandidate,
@@ -34,6 +37,13 @@ T0 = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
 
 
 def seed_historical_projection(session: Session) -> tuple[TrendCandidate, TrendEntity]:
+    raw_bytes = b"""<?xml version="1.0"?>
+<rss xmlns:ht="https://trends.google.com/trending/rss"><channel><item>
+<title>historical entity</title>
+<link>https://trends.google.com/trending/rss?geo=KR</link>
+<pubDate>Sun, 20 Sep 2026 01:00:00 +0000</pubDate>
+<ht:approx_traffic>100+</ht:approx_traffic>
+</item></channel></rss>"""
     collection = CollectionRun(
         run_key="replay-google-t0",
         source=Source.GOOGLE_TRENDS,
@@ -43,18 +53,21 @@ def seed_historical_projection(session: Session) -> tuple[TrendCandidate, TrendE
     )
     payload = RawPayload(
         source=Source.GOOGLE_TRENDS,
-        payload_hash="a" * 64,
-        raw_payload={"data": ""},
+        payload_hash=hashlib.sha256(raw_bytes).hexdigest(),
+        raw_payload={
+            "content_encoding": "base64",
+            "data": base64.b64encode(raw_bytes).decode("ascii"),
+        },
         collected_at=T0_START + timedelta(hours=1),
         source_timestamp=T0_START + timedelta(hours=1),
         collector_version="test",
-        parser_version="test",
+        parser_version="google-rss-parser-v1",
     )
     live_run = PipelineRun(
         kind=RunKind.LIVE,
-        as_of=T0,
-        started_at=T0,
-        completed_at=T0,
+        as_of=T0_START + timedelta(hours=1, minutes=1),
+        started_at=T0_START + timedelta(hours=1),
+        completed_at=T0_START + timedelta(hours=1, minutes=1),
         status=RunStatus.SUCCEEDED,
         normalizer_version="normalizer-v1",
         entity_version="entity-v1",
@@ -97,6 +110,17 @@ def seed_historical_projection(session: Session) -> tuple[TrendCandidate, TrendE
     )
     session.add_all([collection, payload, live_run, entity, current_entity, candidate])
     session.flush()
+    session.add(
+        RawFetch(
+            run_id=collection.id,
+            raw_payload_id=payload.id,
+            request_url="https://trends.google.com/trending/rss?geo=KR",
+            collected_at=T0_START + timedelta(hours=1),
+            source_timestamp=T0_START + timedelta(hours=1),
+            collector_version="test",
+            parser_version="google-rss-parser-v1",
+        )
+    )
     observation = SourceObservation(
         run_id=collection.id,
         raw_payload_id=payload.id,
@@ -126,8 +150,8 @@ def seed_historical_projection(session: Session) -> tuple[TrendCandidate, TrendE
                 status=ResolutionStatus.RESOLVED,
                 reason="EXACT_WIKIDATA",
                 raw_fetch_ids=[],
-                as_of=T0,
-                attempted_at=T0 + timedelta(minutes=1),
+                as_of=T0_START + timedelta(hours=1),
+                attempted_at=T0_START + timedelta(hours=1, minutes=1),
             ),
         ]
     )
@@ -148,17 +172,37 @@ def test_replay_ignores_future_observation_and_current_relink(db_session: Sessio
         completed_at=T0 + timedelta(days=1),
         status=RunStatus.SUCCEEDED,
     )
+    future_raw = b"""<?xml version="1.0"?>
+<rss xmlns:ht="https://trends.google.com/trending/rss"><channel><item>
+<title>historical entity</title>
+<pubDate>Mon, 21 Sep 2026 12:00:00 +0000</pubDate>
+<ht:approx_traffic>999999+</ht:approx_traffic>
+</item></channel></rss>"""
     future_payload = RawPayload(
         source=Source.GOOGLE_TRENDS,
-        payload_hash="b" * 64,
-        raw_payload={"data": ""},
+        payload_hash=hashlib.sha256(future_raw).hexdigest(),
+        raw_payload={
+            "content_encoding": "base64",
+            "data": base64.b64encode(future_raw).decode("ascii"),
+        },
         collected_at=T0 + timedelta(days=1),
         source_timestamp=T0 + timedelta(days=1),
         collector_version="test",
-        parser_version="test",
+        parser_version="google-rss-parser-v1",
     )
     db_session.add_all([future_collection, future_payload])
     db_session.flush()
+    db_session.add(
+        RawFetch(
+            run_id=future_collection.id,
+            raw_payload_id=future_payload.id,
+            request_url="https://trends.google.com/trending/rss?geo=KR",
+            collected_at=T0 + timedelta(days=1),
+            source_timestamp=T0 + timedelta(days=1),
+            collector_version="test",
+            parser_version="google-rss-parser-v1",
+        )
+    )
     future = SourceObservation(
         run_id=future_collection.id,
         raw_payload_id=future_payload.id,
@@ -172,19 +216,20 @@ def test_replay_ignores_future_observation_and_current_relink(db_session: Sessio
     )
     db_session.add(future)
     db_session.flush()
-    db_session.add(
-        CandidateObservation(candidate_id=candidate.id, observation_id=future.id)
-    )
+    db_session.add(CandidateObservation(candidate_id=candidate.id, observation_id=future.id))
     db_session.commit()
 
     second = service.run(T0_START, T0, score_version="score-replay-test", dry_run=True)
 
     assert first.snapshot_digest == second.snapshot_digest
     assert first.entity_ids == (historical_entity.id,)
-    assert first.snapshot_count == 1
-    assert db_session.scalar(
-        select(func.count()).select_from(PipelineRun).where(PipelineRun.kind == RunKind.REPLAY)
-    ) == 0
+    assert first.snapshot_count == 2
+    assert (
+        db_session.scalar(
+            select(func.count()).select_from(PipelineRun).where(PipelineRun.kind == RunKind.REPLAY)
+        )
+        == 0
+    )
 
 
 def test_persisted_replay_has_isolated_run_identity(db_session: Session) -> None:
@@ -208,13 +253,35 @@ def test_persisted_replay_has_isolated_run_identity(db_session: Session) -> None
     assert snapshot.score_version == "score-replay-persist"
 
 
+def test_replay_digest_covers_all_pipeline_versions(db_session: Session) -> None:
+    seed_historical_projection(db_session)
+    service = ReplayService(db_session, now=lambda: T0 + timedelta(days=3))
+
+    first = service.run(
+        T0_START,
+        T0,
+        score_version="score-replay-versions",
+        normalizer_version="normalizer-a",
+        dry_run=True,
+    )
+    second = service.run(
+        T0_START,
+        T0,
+        score_version="score-replay-versions",
+        normalizer_version="normalizer-b",
+        dry_run=True,
+    )
+
+    assert first.snapshot_digest != second.snapshot_digest
+    assert first.snapshot_count == 2
+    assert db_session.scalar(select(func.count()).select_from(TrendSnapshot)) == 0
+
+
 def test_persisted_replay_rejects_existing_live_snapshot_version(
     db_session: Session,
 ) -> None:
     _, entity = seed_historical_projection(db_session)
-    live_run_id = db_session.scalar(
-        select(PipelineRun.id).where(PipelineRun.kind == RunKind.LIVE)
-    )
+    live_run_id = db_session.scalar(select(PipelineRun.id).where(PipelineRun.kind == RunKind.LIVE))
     assert live_run_id is not None
     db_session.add(
         TrendSnapshot(

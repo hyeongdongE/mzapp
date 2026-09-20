@@ -26,6 +26,7 @@ from app.models.tables import (
     CostRecord,
     EntityCandidate,
     EntityClassification,
+    EntityResolutionAttempt,
     HumanEvaluation,
     PipelineRun,
     RawPayload,
@@ -136,6 +137,16 @@ def test_evaluate_day_reads_period_facts_without_future_rows(db_session: Session
                     entity_version="entity-v1",
                     match_reason="TEST",
                 ),
+                EntityResolutionAttempt(
+                    candidate_id=candidate.id,
+                    pipeline_run_id=pipeline.id,
+                    entity_id=entity.id,
+                    status=ResolutionStatus.RESOLVED,
+                    reason="TEST",
+                    raw_fetch_ids=[],
+                    as_of=observed_at,
+                    attempted_at=observed_at + timedelta(minutes=1),
+                ),
             ]
         )
 
@@ -201,11 +212,14 @@ def test_evaluate_day_reads_period_facts_without_future_rows(db_session: Session
     result = evaluate_day(db_session, DAY)
 
     assert result.supply.raw_candidates == 2
-    assert result.supply.unique_candidates == 2
+    assert result.supply.unique_candidates == 1
     assert result.supply.trend_entities == 1
     assert result.supply.approved_cards == 1
     assert result.coverage[Category.SPORTS].candidates == 1
     assert result.coverage[Category.SPORTS].valid_cards == 1
+    assert result.coverage[Category.SPORTS].raw_candidates == 2
+    assert result.coverage[Category.SPORTS].usable_cards == 1
+    assert result.cost.recorded is True
     assert result.quality.precision == Decimal("1.0000")
     assert result.quality.unsupported_summary_rate == Decimal("1.0000")
     assert result.cross_source.rate == Decimal("1.0000")
@@ -213,6 +227,39 @@ def test_evaluate_day_reads_period_facts_without_future_rows(db_session: Session
     assert result.freshness.approval_p50_minutes == Decimal("540.00")
     assert result.cost.total_cost == Decimal("2.100000")
     assert result.versions["score"] == ("score-v1",)
+
+    future_target = TrendEntity(
+        canonical_name="future merge target",
+        normalized_name="future merge target",
+        wikidata_id="Q_EVALUATION_FUTURE_MERGE",
+        resolution_status=ResolutionStatus.RESOLVED,
+        entity_types=[],
+        category=Category.OTHER,
+        review_status=ReviewStatus.PENDING,
+        version=1,
+        created_at=START + timedelta(days=1),
+        updated_at=START + timedelta(days=1),
+    )
+    db_session.add(future_target)
+    db_session.flush()
+    for link in db_session.query(EntityCandidate).all():
+        link.entity_id = future_target.id
+    db_session.add(
+        Review(
+            entity_id=entity.id,
+            action=ReviewAction.MERGE,
+            actor="future-reviewer",
+            payload={"target_entity_id": future_target.id},
+            created_at=START + timedelta(days=1),
+        )
+    )
+    db_session.commit()
+
+    rerun = evaluate_day(db_session, DAY)
+
+    assert rerun.supply == result.supply
+    assert rerun.coverage == result.coverage
+    assert rerun.cross_source == result.cross_source
 
 
 def test_evaluate_day_does_not_read_future_evaluations(db_session: Session) -> None:
@@ -245,6 +292,7 @@ def test_evaluate_day_does_not_read_future_evaluations(db_session: Session) -> N
 
     assert result.quality.reviewed == 0
     assert result.quality.duplicate_rate is None
+    assert result.cost.recorded is False
 
 
 def test_approval_delay_uses_original_detection_from_prior_day(db_session: Session) -> None:
@@ -304,3 +352,59 @@ def test_approval_delay_uses_original_detection_from_prior_day(db_session: Sessi
     assert result.freshness.detection_samples == 0
     assert result.freshness.approval_samples == 1
     assert result.freshness.approval_p50_minutes == Decimal("240.00")
+
+
+def test_day_uses_final_review_state_and_latest_actor_evaluation(
+    db_session: Session,
+) -> None:
+    entity = TrendEntity(
+        canonical_name="adjudicated",
+        normalized_name="adjudicated",
+        wikidata_id="Q_ADJUDICATED",
+        resolution_status=ResolutionStatus.RESOLVED,
+        entity_types=[],
+        category=Category.OTHER,
+        review_status=ReviewStatus.REJECTED,
+        version=3,
+        created_at=START,
+        updated_at=START + timedelta(hours=4),
+    )
+    db_session.add(entity)
+    db_session.flush()
+    db_session.add_all(
+        [
+            Review(
+                entity_id=entity.id,
+                action=ReviewAction.APPROVE,
+                actor="reviewer",
+                payload={},
+                created_at=START + timedelta(hours=1),
+            ),
+            Review(
+                entity_id=entity.id,
+                action=ReviewAction.REJECT,
+                actor="reviewer",
+                payload={},
+                created_at=START + timedelta(hours=2),
+            ),
+            HumanEvaluation(
+                entity_id=entity.id,
+                label=HumanEvaluationLabel.VALID_TREND,
+                actor="reviewer",
+                created_at=START + timedelta(hours=3),
+            ),
+            HumanEvaluation(
+                entity_id=entity.id,
+                label=HumanEvaluationLabel.DUPLICATE,
+                actor="reviewer",
+                created_at=START + timedelta(hours=4),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    result = evaluate_day(db_session, DAY)
+
+    assert result.supply.approved_cards == 0
+    assert result.quality.reviewed == 1
+    assert result.quality.duplicates == 1

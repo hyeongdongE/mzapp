@@ -8,9 +8,9 @@ from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 
-from app.evaluation.metrics import cost, coverage, cross_source, freshness, quality
+from app.evaluation.metrics import cost, cross_source, freshness, quality
 from app.evaluation.models import (
-    CardFact,
+    CategoryCoverage,
     CostFact,
     CostMetrics,
     DailyEvaluation,
@@ -60,20 +60,26 @@ def _render_body(result: DailyEvaluation | WeeklyEvaluation) -> list[str]:
         "| Metric | Count |",
         "|---|---:|",
         f"| Raw candidates | {result.supply.raw_candidates} |",
-        f"| Unique candidates | {result.supply.unique_candidates} |",
+        f"| Unique entities (acquisition cohort) | {result.supply.unique_candidates} |",
         f"| Trend entities | {result.supply.trend_entities} |",
         f"| Approved cards | {result.supply.approved_cards} |",
+        f"| Source-day candidates (diagnostic) | {result.supply.source_day_candidates} |",
         "",
         "## Category coverage",
         "",
-        "| Category | Candidates | Valid cards |",
-        "|---|---:|---:|",
+        "| Category | Raw | Unique entities | Valid cards | Reviewed | Usable | "
+        "Duplicate | Noise | News-only |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for category in Category:
         category_metrics = result.coverage[category]
         lines.append(
-            f"| {category.value} | {category_metrics.candidates} | "
-            f"{category_metrics.valid_cards} |"
+            f"| {category.value} | {category_metrics.raw_candidates} | "
+            f"{category_metrics.candidates} | {category_metrics.valid_cards} | "
+            f"{category_metrics.reviewed} | {category_metrics.usable_cards} | "
+            f"{_format_rate(category_metrics.duplicate_rate)} | "
+            f"{_format_rate(category_metrics.noise_rate)} | "
+            f"{_format_rate(category_metrics.news_only_rate)} |"
         )
     lines.extend(["", "## Quality", "", "| Metric | Value |", "|---|---:|"])
     lines.extend(f"| {name} | {value} |" for name, value in _quality_rows(result))
@@ -101,12 +107,15 @@ def _render_body(result: DailyEvaluation | WeeklyEvaluation) -> list[str]:
             "",
             "## Cost",
             "",
-            f"Total cost: {result.cost.total_cost:.6f} USD",
-            f"Human review minutes: {result.cost.human_minutes}",
+            "Cost data recorded: " + ("Yes" if result.cost.recorded else "No"),
+            "Total cost: "
+            + (f"{result.cost.total_cost:.6f} USD" if result.cost.recorded else "N/A"),
+            "Human review minutes: "
+            + (str(result.cost.human_minutes) if result.cost.recorded else "N/A"),
             "Cost per approved card: "
             + (
                 "N/A"
-                if result.cost.cost_per_approved_card is None
+                if not result.cost.recorded or result.cost.cost_per_approved_card is None
                 else f"{result.cost.cost_per_approved_card:.6f} USD"
             ),
             "",
@@ -119,8 +128,10 @@ def _render_body(result: DailyEvaluation | WeeklyEvaluation) -> list[str]:
             f"| {cost_type} | {amount:.6f} |"
             for cost_type, amount in sorted(result.cost.by_type.items())
         )
-    else:
+    elif result.cost.recorded:
         lines.append("| None | 0.000000 |")
+    else:
+        lines.append("| N/A | N/A |")
     lines.extend(["", "## Top noise sources", ""])
     if result.top_noise_sources:
         lines.extend(f"- {label}: {count}" for label, count in result.top_noise_sources)
@@ -185,9 +196,7 @@ def write_report_atomic(path: Path, content: str) -> None:
             temporary_path.unlink(missing_ok=True)
 
 
-def aggregate_week(
-    days: Sequence[DailyEvaluation], *, week_number: int
-) -> WeeklyEvaluation:
+def aggregate_week(days: Sequence[DailyEvaluation], *, week_number: int) -> WeeklyEvaluation:
     if not days:
         raise ValueError("weekly evaluation requires at least one daily evaluation")
     ordered = sorted(days, key=lambda item: item.day)
@@ -199,14 +208,28 @@ def aggregate_week(
         unique_candidates=sum(item.supply.unique_candidates for item in ordered),
         trend_entities=sum(item.supply.trend_entities for item in ordered),
         approved_cards=sum(item.supply.approved_cards for item in ordered),
+        source_day_candidates=sum(item.supply.source_day_candidates for item in ordered),
     )
-    cards: list[CardFact] = []
-    for item in ordered:
-        for category, category_metrics in item.coverage.items():
-            cards.extend(
-                CardFact(category, valid=index < category_metrics.valid_cards)
-                for index in range(category_metrics.candidates)
-            )
+    category_metrics: dict[Category, CategoryCoverage] = {}
+    for category in Category:
+        values = [item.coverage[category] for item in ordered]
+        reviewed = sum(value.reviewed for value in values)
+        duplicate_count = sum(value.duplicate_items for value in values)
+        noise_count = sum(value.noise_items for value in values)
+        news_count = sum(value.news_only_items for value in values)
+        category_metrics[category] = CategoryCoverage(
+            candidates=sum(value.candidates for value in values),
+            valid_cards=sum(value.valid_cards for value in values),
+            raw_candidates=sum(value.raw_candidates for value in values),
+            reviewed=reviewed,
+            usable_cards=sum(value.usable_cards for value in values),
+            duplicate_items=duplicate_count,
+            noise_items=noise_count,
+            news_only_items=news_count,
+            duplicate_rate=(Decimal(duplicate_count) / reviewed if reviewed else None),
+            noise_rate=(Decimal(noise_count) / reviewed if reviewed else None),
+            news_only_rate=(Decimal(news_count) / reviewed if reviewed else None),
+        )
 
     labels: list[HumanEvaluationLabel] = []
     for item in ordered:
@@ -239,8 +262,7 @@ def aggregate_week(
     source_sets.extend(
         frozenset({Source.GOOGLE_TRENDS})
         for _ in range(
-            sum(item.cross_source.eligible_entities for item in ordered)
-            - len(source_sets)
+            sum(item.cross_source.eligible_entities for item in ordered) - len(source_sets)
         )
     )
     freshness_facts = [
@@ -248,12 +270,9 @@ def aggregate_week(
         for item in ordered
         for minutes in item.freshness.detection_minutes
     ]
-    approval_minutes = [
-        minutes for item in ordered for minutes in item.freshness.approval_minutes
-    ]
+    approval_minutes = [minutes for item in ordered for minutes in item.freshness.approval_minutes]
     freshness_facts.extend(
-        FreshnessFact(None, timedelta(minutes=float(minutes)))
-        for minutes in approval_minutes
+        FreshnessFact(None, timedelta(minutes=float(minutes))) for minutes in approval_minutes
     )
     freshness_metrics = freshness(freshness_facts)
 
@@ -270,6 +289,7 @@ def aggregate_week(
         human_minutes=sum(item.cost.human_minutes for item in ordered),
         cost_per_approved_card=calculated_cost.cost_per_approved_card,
         by_type=calculated_cost.by_type,
+        recorded=all(item.cost.recorded for item in ordered),
     )
     noise_counts: Counter[str] = Counter()
     versions: dict[str, set[str]] = {}
@@ -284,7 +304,7 @@ def aggregate_week(
         end_date=ordered[-1].day,
         complete_days=sum(item.complete_day for item in ordered),
         supply=supply,
-        coverage=coverage(cards),
+        coverage=category_metrics,
         quality=quality_metrics,
         cross_source=cross_source(source_sets),
         freshness=freshness_metrics,

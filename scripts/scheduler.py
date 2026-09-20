@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import signal
+from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -21,24 +22,34 @@ def completed_week_number(poc_start: date, last_complete_day: date) -> int | Non
     return complete_days // 7
 
 
-def scheduled_actions(poc_start: date, output_dir: Path) -> SchedulerActions:
+def scheduled_actions(
+    poc_start: date,
+    output_dir: Path,
+    *,
+    now: Callable[[], datetime] | None = None,
+) -> SchedulerActions:
+    clock = now or (lambda: datetime.now(UTC))
+
     def collect_google() -> None:
-        now = datetime.now(UTC)
-        asyncio.run(collect("google", now))
+        current = clock()
+        asyncio.run(collect("google", current))
 
     def collect_wikimedia() -> None:
-        now = datetime.now(UTC)
-        target_date = (now - timedelta(days=2)).date()
-        asyncio.run(collect("wikimedia", now, target_date=target_date))
+        current = clock()
+        target_date = (current - timedelta(days=2)).date()
+        asyncio.run(collect("wikimedia", current, target_date=target_date))
 
     def run_pipeline() -> None:
         asyncio.run(build(None, None, None))
 
     def run_daily_evaluation() -> None:
-        daily(datetime.now(UTC).date() - timedelta(days=1), output_dir)
+        current_day = clock().date()
+        daily(current_day - timedelta(days=1), output_dir)
+        # Wikimedia D-2 arrives after the original report, so refresh that source-day diagnostic.
+        daily(current_day - timedelta(days=2), output_dir)
 
     def run_weekly_evaluation() -> None:
-        last_complete_day = datetime.now(UTC).date() - timedelta(days=1)
+        last_complete_day = clock().date() - timedelta(days=1)
         week_number = completed_week_number(poc_start, last_complete_day)
         if week_number is None:
             return

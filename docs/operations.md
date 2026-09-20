@@ -5,28 +5,33 @@
 `scripts/replay.py` accepts an inclusive ISO date range. Date-only `--from` maps to UTC day start;
 date-only `--to` maps to UTC day end. Datetimes must include a timezone and are normalized to UTC.
 
-Replay never calls Wikidata or any other external source. It reconstructs candidate-to-entity links
-from the latest successful **LIVE** `EntityResolutionAttempt` at or before the cutoff and ignores the
-current mutable `entity_candidates` link. Only source observations whose source and acquisition
-timestamps are both within the requested range and at or before the cutoff are scored. Future
-observations therefore cannot alter a historical dry-run digest.
+Replay never calls Wikidata or any other external source. It verifies and decodes immutable
+`raw_payloads`, selects the parser recorded by each `raw_fetch`, parses the official Google/Wikimedia
+bytes again, and normalizes the parsed item text. Candidate-to-entity links come from the latest
+successful **LIVE** `EntityResolutionAttempt` known at each cutoff, never the mutable current link.
+Future payloads and future resolution decisions therefore cannot alter a historical digest.
 
 ```powershell
 uv run python scripts/replay.py `
   --from 2026-09-18 `
   --to 2026-09-20 `
+  --normalizer-version normalizer-v1 `
+  --entity-version entity-v1 `
+  --classifier-version classifier-v1 `
   --score-version score-v2 `
+  --prompt-version prompt-v1 `
   --dry-run
 ```
 
 Dry-run writes nothing. Persisted replay creates an isolated `pipeline_runs(kind=REPLAY)` row,
-versioned snapshots, and a canonical SHA-256 snapshot digest. If a live/replay snapshot already owns
+versioned snapshots, and a canonical SHA-256 digest over the full version set, raw hashes/parser
+provenance, and derived snapshots. If a live/replay snapshot already owns
 the same entity/cutoff/score-version key, persistence fails and requires a new score version instead
 of silently attaching another run to that row. Review and human-evaluation records are never changed.
 
-The replay scores the range at its final cutoff. It is a deterministic backtest building block, not
-a per-hour simulation. A new algorithm must use a new `score_version`; changing only the label
-without changing the checked-in algorithm does not create a different method.
+The replay advances in six-hour cutoffs and uses only snapshots created earlier in that same replay
+run for lifecycle state. This makes HOT/COOLING history independent of pre-existing database
+snapshots and run order. A new algorithm must use a new `score_version`.
 
 ## Scheduler
 
@@ -38,7 +43,7 @@ The single-process APScheduler uses stable IDs, `replace_existing`, `coalesce=Tr
 | Google Trends collection | Every hour |
 | Wikimedia collection | Daily 09:05, targeting the date two days earlier |
 | Entity/classification/scoring/summary pipeline | Hourly at minute 10 |
-| Daily evaluation | Daily 09:30 for the previous UTC day |
+| Daily evaluation | Daily 09:30 for the previous UTC day, plus D-2 refresh after delayed Wikimedia |
 | Weekly evaluation | Monday 10:00 |
 
 Each source is a separate job, so a Google failure does not suppress Wikimedia or reporting.
@@ -55,12 +60,13 @@ process for this PoC.
 
 ## Observed replay smoke (2026-09-21)
 
-Range `2026-09-18` through `2026-09-20`, version `score-replay-smoke-v1`:
+Range `2026-09-18T00:00Z` through `2026-09-21T00:00Z`, version
+`score-replay-raw-v2`:
 
 ```text
-dry-run snapshots=0 digest=72072fe107bfd9c4ae1dfab25d47b93bad0727fc8030da7dcb11877958bb16f2
-run_id=13 snapshots=0 digest=72072fe107bfd9c4ae1dfab25d47b93bad0727fc8030da7dcb11877958bb16f2
+dry-run snapshots=2 digest=09462f0839929735fdee3943c7f91150705425899431c60808fc01fdd832bf13
+run_id=17 snapshots=2 digest=09462f0839929735fdee3943c7f91150705425899431c60808fc01fdd832bf13
 ```
 
-The zero result is expected: the only resolved live entity was a suppressed structural Wikimedia
-baseline item. PostgreSQL stored run 13 as `REPLAY / SUCCEEDED` at the exact UTC end-of-day cutoff.
+PostgreSQL stored run 17 as `REPLAY / SUCCEEDED`. Its two snapshots are ordered at 18:00 and 00:00
+UTC and both are `NEW` with the same explainable score; dry-run and persisted digests matched.

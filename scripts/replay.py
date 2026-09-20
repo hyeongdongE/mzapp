@@ -25,13 +25,24 @@ def main() -> None:
     parser.add_argument("--from", dest="from_text", required=True)
     parser.add_argument("--to", dest="to_text", required=True)
     parser.add_argument("--score-version", required=True)
+    parser.add_argument("--normalizer-version", default="normalizer-v1")
+    parser.add_argument("--entity-version", default="entity-v1")
+    parser.add_argument("--classifier-version", default="classifier-v1")
+    parser.add_argument("--prompt-version", default="prompt-v1")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     from_ = parse_boundary(args.from_text, end=False)
     to = parse_boundary(args.to_text, end=True)
     with session_scope() as session:
         result = ReplayService(session).run(
-            from_, to, score_version=args.score_version, dry_run=args.dry_run
+            from_,
+            to,
+            score_version=args.score_version,
+            normalizer_version=args.normalizer_version,
+            entity_version=args.entity_version,
+            classifier_version=args.classifier_version,
+            prompt_version=args.prompt_version,
+            dry_run=args.dry_run,
         )
     print(
         f"run_id={result.run_id or 'DRY_RUN'} snapshots={result.snapshot_count} "

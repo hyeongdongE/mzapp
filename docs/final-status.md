@@ -83,18 +83,19 @@ Redis, search cluster, microservice split, CQRS, or production-only infrastructu
 | 14 | Internal review dashboard | Today/List/Detail and six transactional review actions |
 | 15 | Daily evaluation report | `scripts/evaluate.py daily`, real 2026-09-20 output |
 | 16 | Category coverage | All enum categories emitted, including zero rows |
-| 17 | Raw replay | Historical projection, dry-run/persisted digest and leakage tests |
+| 17 | Raw replay | Raw decode/reparse, historical projection, six-hour history, version/hash digest tests |
 | 18 | Future Meta interface | `TrendValidationProvider` and named disabled providers |
 | 19 | Works without Meta | Full test/pipeline paths use disabled providers |
-| 20 | Tests pass | 162 local tests plus 14 PostgreSQL/migration integrations; fresh evidence in `docs/poc-plan.md` |
+| 20 | Tests pass | 165 local tests plus PostgreSQL/migration integrations; fresh evidence in `docs/poc-plan.md` |
 | 21 | README local run | Exact Docker and native PowerShell commands in `README.md` |
 
 ## Current evaluation
 
-The 2026-09-20 report contains 68 acquired official observations and seven source-date unique
-candidates. There were zero scored trend entities and zero approved cards because the sole resolved
-live entity was structural baseline noise and other candidates remained conservatively unresolved.
-All review-dependent rates correctly remain `N/A`. Week 01 has one complete Google+Wikimedia day.
+The evaluation contract now uses an acquisition-day cohort for raw observations and unique resolved
+entities; source-day candidates are reported separately as a diagnostic and the scheduler refreshes
+D-2 after delayed Wikimedia arrives. Category rows include raw supply, unique entities, valid and
+usable cards, and quality rates. Missing cost capture is rendered `N/A`, never a misleading zero.
+Historical reports reconstruct resolution plus MERGE/SPLIT state at the report cutoff.
 
 ## Known risks
 
