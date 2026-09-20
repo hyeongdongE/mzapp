@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, datetime, time, timedelta
+from collections.abc import Callable
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from app.collectors.base import CollectionBatch, MalformedPayload, SourceItem
@@ -23,24 +24,31 @@ class WikimediaTopPagesCollector:
         country: str = "KR",
         access: str = "all-access",
         data_lag_days: int = 2,
+        target_date: date | None = None,
+        now: Callable[[], datetime] | None = None,
     ) -> None:
         self._http = http
         self._base_url = base_url.rstrip("/")
         self._country = country
         self._access = access
         self._data_lag_days = data_lag_days
+        self._target_date = target_date
+        self._now = now or (lambda: datetime.now(UTC))
 
     async def collect(self, as_of: datetime) -> CollectionBatch:
-        target_date = as_of.astimezone(UTC).date() - timedelta(days=self._data_lag_days)
+        target_date = self._target_date or (
+            as_of.astimezone(UTC).date() - timedelta(days=self._data_lag_days)
+        )
         request_url = (
             f"{self._base_url}/metrics/pageviews/top-per-country/"
             f"{self._country}/{self._access}/{target_date:%Y/%m/%d}"
         )
         raw_bytes = await self._http.get_bytes(request_url)
-        items = self._parse(raw_bytes, as_of, request_url)
+        collected_at = self._now().astimezone(UTC)
+        items = self._parse(raw_bytes, collected_at, request_url)
         return CollectionBatch(
             source=self.source,
-            collected_at=as_of,
+            collected_at=collected_at,
             request_url=request_url,
             raw_bytes=raw_bytes,
             items=items,

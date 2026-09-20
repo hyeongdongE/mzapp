@@ -28,12 +28,16 @@ def http_client(body: bytes, status_code: int = 200) -> SafeHttpClient:
 
 @pytest.mark.asyncio
 async def test_google_feed_maps_only_available_metrics() -> None:
-    collector = GoogleTrendsRssCollector(http_client(FIXTURE.read_bytes()), FEED_URL)
+    acquired_at = datetime(2026, 9, 20, 12, 0, 5, tzinfo=UTC)
+    collector = GoogleTrendsRssCollector(
+        http_client(FIXTURE.read_bytes()), FEED_URL, now=lambda: acquired_at
+    )
 
     batch = await collector.collect(AS_OF)
 
     assert batch.source is Source.GOOGLE_TRENDS
-    assert batch.collected_at == AS_OF
+    assert batch.collected_at == acquired_at
+    assert {item.observed_at for item in batch.items} == {acquired_at}
     assert [item.canonical_text for item in batch.items] == ["이현중", "AI Tech"]
     assert batch.items[0].source_timestamp == datetime(2026, 9, 20, 11, 40, tzinfo=UTC)
     assert batch.items[0].metrics == {

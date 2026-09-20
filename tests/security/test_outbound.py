@@ -103,3 +103,27 @@ async def test_http_client_rejects_oversized_response() -> None:
 
     with pytest.raises(ResponseTooLarge):
         await safe_client.get_bytes("https://wikimedia.org/api")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("content_length", ["invalid", "-1", "4, 4"])
+async def test_http_client_ignores_malformed_content_length_and_enforces_stream_limit(
+    content_length: str,
+) -> None:
+    safe_client = SafeHttpClient(
+        httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(
+                    200,
+                    content=b"1234",
+                    headers={"content-length": content_length},
+                    request=request,
+                )
+            )
+        ),
+        allowed_hosts={"wikimedia.org"},
+        max_bytes=4,
+        retries=0,
+    )
+
+    assert await safe_client.get_bytes("https://wikimedia.org/api") == b"1234"

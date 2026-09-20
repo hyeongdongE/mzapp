@@ -132,3 +132,16 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
 - Decoding the two live raw blobs produced 20,165 Google bytes and 2,145 Wikimedia bytes; both
   recomputed SHA-256 hashes matched the stored hashes, confirming replay input preservation.
 - Full pipeline replay remains Phase 8 work; Phase 1–2 establishes lossless replay inputs only.
+- Independent review initially found two High issues: failed runs were rolled back and logical
+  `--as-of` values could masquerade as acquisition timestamps. Both were reproduced and fixed.
+- Added migration `0002` and `raw_fetches` so every successful run retains its request URL, actual
+  acquisition timestamp, source timestamp, and collector/parser versions even for an empty response.
+- Added exact Wikimedia `--date` backfill, malformed `Content-Length` handling, conflict recovery,
+  and a real PostgreSQL concurrent raw-payload regression test.
+- Post-fix verification: 37 unit/contract tests passed (one opt-in PostgreSQL test skipped); the
+  PostgreSQL concurrency test passed separately; migration `up -> down -> up` reached `0002`.
+- Post-fix live runs stored 10 Google and 24 Wikimedia observations. DB inspection showed distinct
+  real `started_at`, response `collected_at`/`observed_at`, and `completed_at` values, while the
+  Wikimedia source timestamp remained the explicitly requested `2026-09-18` date.
+- An induced official-host timeout exited nonzero and persisted a `FAILED` run with only the redacted
+  `TIMEOUT` code, confirming failure audit durability.

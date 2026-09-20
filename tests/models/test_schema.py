@@ -80,6 +80,7 @@ def test_schema_contains_replayable_pipeline_tables() -> None:
     expected = {
         "collection_runs",
         "raw_payloads",
+        "raw_fetches",
         "source_observations",
         "pipeline_runs",
         "trend_candidates",

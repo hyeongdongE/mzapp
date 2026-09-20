@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import httpx
 
+from app.collectors.base import CollectorError
 from app.collectors.google_trends import GoogleTrendsRssCollector
 from app.collectors.http import SafeHttpClient
 from app.collectors.wikimedia import WikimediaTopPagesCollector
@@ -23,7 +24,16 @@ def parse_as_of(value: str | None) -> datetime:
     return parsed.astimezone(UTC)
 
 
-async def collect(source: str, as_of: datetime) -> list[dict[str, int | str]]:
+def parse_date(value: str) -> date:
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("--date must use YYYY-MM-DD") from exc
+
+
+async def collect(
+    source: str, as_of: datetime, *, target_date: date | None = None
+) -> list[dict[str, int | str]]:
     settings = get_settings()
     outputs: list[dict[str, int | str]] = []
     async with httpx.AsyncClient() as client:
@@ -42,10 +52,15 @@ async def collect(source: str, as_of: datetime) -> list[dict[str, int | str]]:
             )
         if source in {"wikimedia", "all"}:
             collectors.append(
-                WikimediaTopPagesCollector(safe_http, str(settings.wikimedia_api_url))
+                WikimediaTopPagesCollector(
+                    safe_http,
+                    str(settings.wikimedia_api_url),
+                    target_date=target_date,
+                )
             )
         for collector in collectors:
-            run_key = f"{collector.source.value.lower()}:{as_of:%Y%m%dT%H%M%SZ}"
+            logical_key = target_date.isoformat() if target_date else f"{as_of:%Y%m%dT%H%M%SZ}"
+            run_key = f"{collector.source.value.lower()}:{logical_key}"
             with session_scope() as session:
                 result = await CollectionService(session).run(
                     collector, as_of=as_of, run_key=run_key
@@ -64,8 +79,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Collect official trend signals")
     parser.add_argument("--source", choices=("google", "wikimedia", "all"), default="all")
     parser.add_argument("--as-of")
+    parser.add_argument("--date", type=parse_date, help="exact Wikimedia target date (YYYY-MM-DD)")
     args = parser.parse_args()
-    for output in asyncio.run(collect(args.source, parse_as_of(args.as_of))):
+    if args.date is not None and args.source != "wikimedia":
+        parser.error("--date requires --source wikimedia")
+    try:
+        outputs = asyncio.run(collect(args.source, parse_as_of(args.as_of), target_date=args.date))
+    except CollectorError as exc:
+        parser.exit(1, f"collection failed: {exc.code}\n")
+    for output in outputs:
         print(
             f"source={output['source']} run_id={output['run_id']} "
             f"observations={output['observations']}"

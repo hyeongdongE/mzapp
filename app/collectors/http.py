@@ -63,7 +63,11 @@ class SafeHttpClient:
             if not 200 <= response.status_code < 300:
                 return response.status_code
             content_length = response.headers.get("content-length")
-            if content_length is not None and int(content_length) > self._max_bytes:
+            if (
+                content_length is not None
+                and content_length.isdecimal()
+                and int(content_length) > self._max_bytes
+            ):
                 raise ResponseTooLarge("official source response exceeded configured limit")
             chunks: list[bytes] = []
             size = 0

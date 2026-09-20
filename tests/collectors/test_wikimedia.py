@@ -33,7 +33,10 @@ def http_client(body: bytes, requested_urls: list[str] | None = None) -> SafeHtt
 @pytest.mark.asyncio
 async def test_wikimedia_maps_country_page_metrics_without_relabeling_views() -> None:
     urls: list[str] = []
-    collector = WikimediaTopPagesCollector(http_client(FIXTURE.read_bytes(), urls), BASE_URL)
+    acquired_at = datetime(2026, 9, 20, 12, 0, 5, tzinfo=UTC)
+    collector = WikimediaTopPagesCollector(
+        http_client(FIXTURE.read_bytes(), urls), BASE_URL, now=lambda: acquired_at
+    )
 
     batch = await collector.collect(AS_OF)
 
@@ -41,6 +44,8 @@ async def test_wikimedia_maps_country_page_metrics_without_relabeling_views() ->
         "https://wikimedia.org/api/rest_v1/metrics/pageviews/top-per-country/KR/all-access/2026/09/18"
     ]
     assert batch.source is Source.WIKIMEDIA
+    assert batch.collected_at == acquired_at
+    assert {item.observed_at for item in batch.items} == {acquired_at}
     assert [item.canonical_text for item in batch.items] == [
         "위키백과:대문",
         "이현중 (농구 선수)",
@@ -66,6 +71,22 @@ async def test_wikimedia_empty_articles_returns_empty_batch() -> None:
     batch = await WikimediaTopPagesCollector(http_client(body), BASE_URL).collect(AS_OF)
 
     assert batch.items == []
+
+
+@pytest.mark.asyncio
+async def test_wikimedia_explicit_target_date_is_not_shifted_by_data_lag() -> None:
+    urls: list[str] = []
+    collector = WikimediaTopPagesCollector(
+        http_client(FIXTURE.read_bytes(), urls),
+        BASE_URL,
+        target_date=datetime(2026, 9, 18, tzinfo=UTC).date(),
+    )
+
+    await collector.collect(AS_OF)
+
+    assert urls == [
+        "https://wikimedia.org/api/rest_v1/metrics/pageviews/top-per-country/KR/all-access/2026/09/18"
+    ]
 
 
 @pytest.mark.asyncio

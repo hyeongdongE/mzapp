@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from email.utils import parsedate_to_datetime
@@ -25,16 +26,24 @@ class GoogleTrendsRssCollector:
     collector_version = "google-rss-v1"
     parser_version = "google-rss-parser-v1"
 
-    def __init__(self, http: SafeHttpClient, url: str) -> None:
+    def __init__(
+        self,
+        http: SafeHttpClient,
+        url: str,
+        *,
+        now: Callable[[], datetime] | None = None,
+    ) -> None:
         self._http = http
         self._url = url
+        self._now = now or (lambda: datetime.now(UTC))
 
     async def collect(self, as_of: datetime) -> CollectionBatch:
         raw_bytes = await self._http.get_bytes(self._url)
-        items = self._parse(raw_bytes, as_of)
+        collected_at = self._now().astimezone(UTC)
+        items = self._parse(raw_bytes, collected_at)
         return CollectionBatch(
             source=self.source,
-            collected_at=as_of,
+            collected_at=collected_at,
             request_url=self._url,
             raw_bytes=raw_bytes,
             items=items,

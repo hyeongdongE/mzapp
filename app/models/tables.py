@@ -72,6 +72,21 @@ class RawPayload(Base):
     parser_version: Mapped[str] = mapped_column(String(80), nullable=False)
 
 
+class RawFetch(Base):
+    __tablename__ = "raw_fetches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("collection_runs.id"), unique=True, nullable=False
+    )
+    raw_payload_id: Mapped[int] = mapped_column(ForeignKey("raw_payloads.id"), nullable=False)
+    request_url: Mapped[str] = mapped_column(Text, nullable=False)
+    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source_timestamp: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    collector_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    parser_version: Mapped[str] = mapped_column(String(80), nullable=False)
+
+
 class SourceObservation(Base):
     __tablename__ = "source_observations"
     __table_args__ = (

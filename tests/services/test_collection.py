@@ -3,11 +3,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import create_engine, func, select
+from sqlalchemy.orm import Session
 
 from app.collectors.base import CollectionBatch, HttpRequestFailed, SourceItem
 from app.models.enums import RunStatus, Source
-from app.models.tables import CollectionRun, RawPayload, SourceObservation
+from app.models.tables import Base, CollectionRun, RawFetch, RawPayload, SourceObservation
 from app.services.collection import CollectionService
 
 AS_OF = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
@@ -45,6 +46,7 @@ def test_identical_payload_across_runs_reuses_blob_and_keeps_observations(db_ses
     second = service.persist(batch(), run_key="google:20260920T1100")
 
     assert count(db_session, RawPayload) == 1
+    assert count(db_session, RawFetch) == 2
     assert count(db_session, SourceObservation) == 2
     assert first.run_id != second.run_id
 
@@ -75,6 +77,53 @@ def test_raw_payload_preserves_exact_bytes_for_replay(db_session) -> None:
     assert stored.payload_hash == "5c6a31d0be98a45eb99db929d3f81ee74f89d6058c660f98800f75481eeed533"
 
 
+def test_empty_batch_retains_run_to_payload_fetch_provenance(db_session) -> None:
+    value = batch()
+    value = CollectionBatch(
+        source=value.source,
+        collected_at=value.collected_at,
+        request_url=value.request_url,
+        raw_bytes=b"<rss><channel/></rss>",
+        items=[],
+        collector_version=value.collector_version,
+        parser_version=value.parser_version,
+    )
+
+    result = CollectionService(db_session).persist(value, run_key="google:empty")
+    fetch = db_session.scalar(select(RawFetch).where(RawFetch.run_id == result.run_id))
+
+    assert fetch is not None
+    assert fetch.raw_payload_id == result.payload_id
+    assert fetch.request_url == value.request_url
+    assert fetch.collected_at == value.collected_at.replace(tzinfo=None)
+    assert fetch.source_timestamp is None
+    assert fetch.collector_version == "google-rss-v1"
+    assert fetch.parser_version == "google-rss-parser-v1"
+
+
+def test_same_raw_bytes_retain_each_fetch_parser_version(db_session) -> None:
+    first = batch()
+    second = CollectionBatch(
+        source=first.source,
+        collected_at=first.collected_at,
+        request_url=first.request_url,
+        raw_bytes=first.raw_bytes,
+        items=first.items,
+        collector_version="google-rss-v2",
+        parser_version="google-rss-parser-v2",
+    )
+
+    CollectionService(db_session).persist(first, run_key="google:v1")
+    CollectionService(db_session).persist(second, run_key="google:v2")
+
+    fetches = list(db_session.scalars(select(RawFetch).order_by(RawFetch.id)))
+    assert count(db_session, RawPayload) == 1
+    assert [fetch.parser_version for fetch in fetches] == [
+        "google-rss-parser-v1",
+        "google-rss-parser-v2",
+    ]
+
+
 @pytest.mark.asyncio
 async def test_failed_collection_records_redacted_error_code(db_session) -> None:
     class FailingCollector:
@@ -92,3 +141,68 @@ async def test_failed_collection_records_redacted_error_code(db_session) -> None
     assert run is not None
     assert run.status is RunStatus.FAILED
     assert run.error_code == "TIMEOUT"
+
+
+@pytest.mark.asyncio
+async def test_successful_collection_uses_real_run_boundaries_not_logical_as_of(db_session) -> None:
+    value = batch()
+
+    class SuccessfulCollector:
+        source = Source.GOOGLE_TRENDS
+
+        async def collect(self, _as_of: datetime) -> CollectionBatch:
+            return value
+
+    moments = iter(
+        [
+            datetime(2026, 9, 20, 12, 0, 1, tzinfo=UTC),
+            datetime(2026, 9, 20, 12, 0, 9, tzinfo=UTC),
+        ]
+    )
+
+    await CollectionService(db_session, now=lambda: next(moments)).run(
+        SuccessfulCollector(),
+        as_of=datetime(2020, 1, 1, tzinfo=UTC),
+        run_key="google:trusted-clock",
+    )
+
+    run = db_session.scalar(select(CollectionRun))
+    assert run is not None
+    assert run.started_at == datetime(2026, 9, 20, 12, 0, 1)
+    assert run.completed_at == datetime(2026, 9, 20, 12, 0, 9)
+
+
+@pytest.mark.asyncio
+async def test_failed_collection_survives_outer_rollback_in_its_own_transaction() -> None:
+    class FailingCollector:
+        source = Source.WIKIMEDIA
+
+        async def collect(self, _as_of: datetime) -> CollectionBatch:
+            raise HttpRequestFailed("TIMEOUT")
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    moments = iter(
+        [
+            datetime(2026, 9, 20, 12, 0, 1, tzinfo=UTC),
+            datetime(2026, 9, 20, 12, 0, 9, tzinfo=UTC),
+        ]
+    )
+    try:
+        with Session(engine) as session:
+            with pytest.raises(HttpRequestFailed):
+                await CollectionService(session, now=lambda: next(moments)).run(
+                    FailingCollector(), as_of=AS_OF, run_key="wikimedia:durable-failure"
+                )
+            session.rollback()
+
+        with Session(engine) as verification:
+            run = verification.scalar(select(CollectionRun))
+            assert run is not None
+            assert run.status is RunStatus.FAILED
+            assert run.started_at == datetime(2026, 9, 20, 12, 0, 1)
+            assert run.completed_at == datetime(2026, 9, 20, 12, 0, 9)
+            assert run.error_code == "TIMEOUT"
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()
