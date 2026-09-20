@@ -213,3 +213,9 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
 - Live PoC DB run 10 succeeded with zero snapshots because the only resolved entity is a structural,
   old Wikimedia baseline item; targeted official runs 7–9 remained conservatively `NEEDS_REVIEW`.
 - Independent Trend Detection + Scoring review: pending.
+- The initial independent review found one High cutoff leak through global candidate `first_seen_at`
+  and five Medium counterexamples. Fixes now derive first-seen only from cutoff-eligible observations,
+  require real observation buckets, assign zero strength to missing metrics, deduplicate repeated
+  official items, enforce resolved status inside the detector, and recover concurrent snapshot races.
+- Post-fix verification: 99 local tests passed/9 opt-in integrations skipped; Ruff passed. A forced
+  PostgreSQL concurrent insert returned one idempotent snapshot row. Reviewer revalidation pending.

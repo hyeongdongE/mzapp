@@ -31,6 +31,7 @@ class SignalPoint:
     rank: int | None
     news_count: int
     candidate_id: int
+    source_item_key: str | None = None
 
 
 @dataclass(frozen=True)

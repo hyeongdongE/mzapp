@@ -19,8 +19,9 @@ Source windows reflect official publication lag:
 - Baseline: the 28 days immediately before each source's current window.
 
 Google strength uses `log1p(approx_traffic_lower_bound)` against a fixed source cap. Wikimedia uses
-`log1p(views_ceil)` and falls back to inverse rank only when views are absent. Missing metrics are
-listed in `missing_inputs`; they reduce only the affected signal rather than being invented.
+`log1p(views_ceil)` and falls back to inverse rank only when views are absent. If neither metric nor
+fallback exists, strength is `0.0`; no placeholder signal is invented. Current and previous-window
+missing metrics are separately listed in `missing_inputs`.
 
 ## Components
 
@@ -29,7 +30,7 @@ All components are clamped to 0–1.
 - `velocity`: positive relative change from the previous source-aligned window; declines receive 0
   here and are handled by lifecycle cooling.
 - `novelty`: one minus 28-day presence ratio; structural/static pages receive 0.
-- `persistence`: distinct six-hour buckets in the current window, capped at four.
+- `persistence`: distinct six-hour observation buckets in the current window, capped at four.
 - `cross_source`: 1 only when both official discovery sources independently occur in their current
   windows. A missing second source never rejects the candidate by itself.
 - `baseline_penalty`: 28-day presence ratio, forced to 1 for main pages and `Special:`/`특수:` pages.
@@ -46,8 +47,10 @@ The exact formula is:
 )
 ```
 
-The result is clamped to 0–100. A single new Google/news observation receives 55 at most under the
-default components and cannot become `HOT`, even if one metric is large. Sports are not globally
+Repeated collection occurrences with the same official `source_item_id` are deduplicated before
+feature calculation. The result is clamped to 0–100. A single new Google/news observation receives
+55 at most under the default components and cannot become `RISING` or `HOT`, even if one metric is
+large. Sports are not globally
 penalized merely for being sports; personalization/category selection handles relevance, while the
 same persistence, baseline, news-only, and cross-source rules apply to event spikes.
 
@@ -56,22 +59,28 @@ same persistence, baseline, news-only, and cross-source rules apply to event spi
 Rules use precedence `COOLING`, `HOT`, `RISING`, `NEW`:
 
 - `COOLING`: prior `RISING`/`HOT` and current strength is at most 60% of the previous window.
-- `HOT`: score at least 70, with three high-score snapshot windows or six hours of sustained high
-  score.
+- `HOT`: score at least 70, with three distinct six-hour observation buckets or observations spanning
+  at least six hours. Re-running the same data never creates persistence.
 - `RISING`: at least two current observations and strength at least 25% above the previous window
   (or positive after an empty previous window).
 - `NEW`: first seen within 24 hours, absent from baseline.
 
 An old weak entity with no prior lifecycle is not mislabeled `NEW`; no snapshot is published. With a
 prior state, a low-signal entity retains that state unless the cooling rule applies.
+The detector itself verifies that the entity is `RESOLVED`; callers cannot bypass this invariant.
+Snapshot inserts recover the `(entity, as_of, score_version)` unique race through a savepoint and
+return the single committed row.
 
 ## Verification
 
-- Unit/full regression: 94 passed and 8 opt-in integration tests skipped; Ruff passed.
+- Unit/full regression after review fixes: 99 passed and 9 opt-in integration tests skipped; Ruff
+  passed.
 - Live PoC DB run 10 completed with zero snapshots because its only resolved entity was an old
   structural Wikimedia baseline item. This is intentional suppression, not missing output.
 - A fresh PostgreSQL database persisted a two-window Google fixture as `RISING`, score `60.0`, with
   news-only penalty `1.0`, UTC timestamps, and the complete JSON breakdown. The temporary database
   was removed after inspection.
+- A PostgreSQL barrier test forced two concurrent snapshot inserts; both callers returned the same
+  row and the unique key retained exactly one snapshot.
 - Targeted official Wikidata runs 7–9 stayed `NEEDS_REVIEW` for ambiguous/unavailable matches and
   therefore produced no score, confirming unresolved entities cannot leak into snapshots.

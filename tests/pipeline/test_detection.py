@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from sqlalchemy import func, select
 
 from app.models.enums import (
@@ -25,6 +27,8 @@ from app.models.tables import (
 )
 from app.pipeline.baseline import SignalPoint
 from app.pipeline.detection import FeatureExtractor, TrendDetector
+from app.pipeline.lifecycle import LifecycleContext, LifecycleDetector
+from app.pipeline.scoring import ExplainableScorer
 from app.repositories.entities import EntityRepository
 
 AS_OF = datetime(2026, 9, 21, 0, 0, tzinfo=UTC)
@@ -38,6 +42,7 @@ def point(
     observed_at: datetime | None = None,
     candidate_id: int = 1,
     news_count: int = 0,
+    source_item_key: str | None = None,
 ) -> SignalPoint:
     timestamp = AS_OF - timedelta(hours=hours_ago)
     return SignalPoint(
@@ -49,6 +54,7 @@ def point(
         rank=None,
         news_count=news_count,
         candidate_id=candidate_id,
+        source_item_key=source_item_key,
     )
 
 
@@ -85,8 +91,100 @@ def test_wikimedia_known_lag_uses_72_hour_source_window() -> None:
     assert extracted.signal.cross_source == 1
 
 
+def test_missing_metrics_create_no_strength_or_rising_state() -> None:
+    extracted = FeatureExtractor().extract(
+        [
+            point(7, metric=None, source_item_key="missing-1"),
+            point(1, metric=None, source_item_key="missing-2"),
+        ],
+        AS_OF,
+    )
+    score = ExplainableScorer().score(
+        extracted.signal, missing_inputs=extracted.missing_inputs
+    )
+    lifecycle = LifecycleDetector().detect(
+        LifecycleContext(
+            first_seen_at=extracted.first_seen_at,
+            current_strength=extracted.current_strength,
+            previous_strength=extracted.previous_strength,
+            current_observations=extracted.current_windows,
+            score=score.total,
+            baseline_presence=extracted.baseline.presence_ratio,
+        ),
+        AS_OF,
+    )
+
+    assert extracted.current_strength == 0
+    assert "google.approx_traffic_lower_bound.current" in extracted.missing_inputs
+    assert lifecycle is TrendLifecycle.NEW
+
+
+def test_repeated_same_source_item_is_one_observation_window() -> None:
+    original = point(1, news_count=3, source_item_key="same-rss-item")
+    repeated = replace(original, observed_at=AS_OF - timedelta(minutes=5))
+
+    extracted = FeatureExtractor().extract([original, repeated], AS_OF)
+    score = ExplainableScorer().score(extracted.signal)
+    lifecycle = LifecycleDetector().detect(
+        LifecycleContext(
+            first_seen_at=extracted.first_seen_at,
+            current_strength=extracted.current_strength,
+            previous_strength=0,
+            current_observations=extracted.current_windows,
+            score=score.total,
+            baseline_presence=0,
+            high_score_windows=extracted.current_windows,
+            high_score_duration_hours=extracted.current_span_hours,
+        ),
+        AS_OF,
+    )
+
+    assert extracted.current_observations == 1
+    assert extracted.current_windows == 1
+    assert lifecycle is TrendLifecycle.NEW
+
+
+def test_repeated_scoring_cannot_turn_one_time_bucket_hot() -> None:
+    extracted = FeatureExtractor().extract(
+        [
+            point(1, metric=1_000_000, source_item_key="google-item"),
+            point(
+                1,
+                source=Source.WIKIMEDIA,
+                metric=10_000_000,
+                source_item_key="wikimedia-item",
+            ),
+        ],
+        AS_OF,
+    )
+    score = ExplainableScorer().score(extracted.signal)
+
+    lifecycle = LifecycleDetector().detect(
+        LifecycleContext(
+            first_seen_at=extracted.first_seen_at,
+            current_strength=extracted.current_strength,
+            previous_strength=0,
+            current_observations=extracted.current_windows,
+            score=score.total,
+            baseline_presence=0,
+            high_score_windows=extracted.current_windows,
+            high_score_duration_hours=extracted.current_span_hours,
+        ),
+        AS_OF,
+    )
+
+    assert score.total >= 70
+    assert extracted.current_windows == 1
+    assert lifecycle is TrendLifecycle.NEW
+
+
 def _add_observation(
-    db_session, *, index: int, timestamp: datetime, metric: int
+    db_session,
+    *,
+    index: int,
+    timestamp: datetime,
+    metric: int,
+    observed_at: datetime | None = None,
 ) -> SourceObservation:
     run = CollectionRun(
         run_key=f"detection:{index}",
@@ -113,7 +211,7 @@ def _add_observation(
         source_item_id=f"detection:{index}",
         canonical_text="topic",
         source_timestamp=timestamp,
-        observed_at=timestamp,
+        observed_at=observed_at or timestamp,
         source_url="https://trends.google.com/trending/rss?geo=KR",
         metrics={
             "approx_traffic_lower_bound": metric,
@@ -183,3 +281,73 @@ def test_detector_persists_one_explainable_snapshot_idempotently(db_session) -> 
     assert first.breakdown["interpretation"] == "internal_relative_score_not_probability"
     assert first.breakdown["components"]["cross_source"] == 0
     assert db_session.scalar(select(func.count()).select_from(TrendSnapshot)) == 1
+
+    entity.resolution_status = ResolutionStatus.NEEDS_REVIEW
+    assert detector.snapshot(
+        entity.id, AS_OF + timedelta(minutes=1), pipeline_run_id=run.id
+    ) is None
+    assert db_session.scalar(select(func.count()).select_from(TrendSnapshot)) == 1
+
+
+@pytest.mark.parametrize(
+    ("source_timestamp", "observed_at"),
+    [
+        (AS_OF + timedelta(minutes=2), AS_OF + timedelta(minutes=3)),
+        (AS_OF - timedelta(minutes=2), AS_OF + timedelta(minutes=1)),
+    ],
+)
+def test_cutoff_excluded_observation_cannot_create_new_snapshot(
+    db_session, source_timestamp: datetime, observed_at: datetime
+) -> None:
+    observation = _add_observation(
+        db_session,
+        index=90,
+        timestamp=source_timestamp,
+        observed_at=observed_at,
+        metric=10_000,
+    )
+    candidate = TrendCandidate(
+        source=Source.GOOGLE_TRENDS,
+        canonical_text="future topic",
+        normalized_text="future topic",
+        first_seen_at=source_timestamp,
+        last_seen_at=source_timestamp,
+        status=CandidateStatus.ACTIVE,
+        resolution_status=ResolutionStatus.RESOLVED,
+        normalizer_version="normalizer-v1",
+        generation=1,
+    )
+    entity = TrendEntity(
+        canonical_name="future topic",
+        normalized_name="future topic",
+        wikidata_id="Q_FUTURE_DETECTION",
+        entity_type=None,
+        entity_types=[],
+        resolution_status=ResolutionStatus.RESOLVED,
+        review_status=ReviewStatus.PENDING,
+        version=1,
+    )
+    run = PipelineRun(
+        kind=RunKind.LIVE,
+        as_of=AS_OF,
+        started_at=AS_OF,
+        status=RunStatus.RUNNING,
+        normalizer_version="normalizer-v1",
+        entity_version="entity-v1",
+        classifier_version="classifier-v1",
+        score_version="score-v1",
+        prompt_version="prompt-v1",
+    )
+    db_session.add_all([candidate, entity, run])
+    db_session.flush()
+    db_session.add(
+        CandidateObservation(candidate_id=candidate.id, observation_id=observation.id)
+    )
+    assert EntityRepository(db_session).link_candidate(entity.id, candidate.id, "test")
+
+    snapshot = TrendDetector(db_session, now=lambda: AS_OF).snapshot(
+        entity.id, AS_OF, pipeline_run_id=run.id
+    )
+
+    assert snapshot is None
+    assert db_session.scalar(select(func.count()).select_from(TrendSnapshot)) == 0
