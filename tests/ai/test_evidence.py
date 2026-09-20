@@ -25,9 +25,14 @@ def evidence(
     return EvidenceRecord(
         id=evidence_id,
         entity_id=entity_id,
+        observation_id=evidence_id,
         source=Source.GOOGLE_TRENDS,
         kind=kind,
-        fact={"metric": 100},
+        fact={
+            "canonical_text": "테스트 주제",
+            "metrics": {"traffic": 100},
+            "source_timestamp": AS_OF.isoformat(),
+        },
         source_url="https://trends.google.com/trending/rss?geo=KR",
         observed_at=observed_at,
     )
@@ -83,7 +88,12 @@ def test_unapproved_url_and_future_source_timestamp_are_rejected() -> None:
     checker = EvidenceChecker()
     unapproved = evidence(1).model_copy(update={"source_url": "https://evil.test/data"})
     future_source = evidence(2).model_copy(
-        update={"fact": {"source_timestamp": "2026-09-20T12:00:01+00:00"}}
+        update={
+            "fact": {
+                **evidence(2).fact,
+                "source_timestamp": "2026-09-20T12:00:01+00:00",
+            }
+        }
     )
 
     assert checker.check(
@@ -146,9 +156,17 @@ def test_claim_kind_must_match_trusted_evidence_kind() -> None:
     )
     wikidata = evidence(2, kind="WIKIDATA_ENTITY").model_copy(
         update={
+            "observation_id": None,
+            "resolution_attempt_id": 1,
+            "raw_fetch_id": 1,
             "source": Source.WIKIDATA,
             "source_url": "https://www.wikidata.org/wiki/Q1",
-            "fact": {"description": "대상 설명"},
+            "fact": {
+                "wikidata_id": "Q1",
+                "canonical_name": "테스트 주제",
+                "description": "대상 설명",
+                "entity_types": [],
+            },
         }
     )
     what = checker.check(
@@ -156,6 +174,7 @@ def test_claim_kind_must_match_trusted_evidence_kind() -> None:
         [wikidata],
         entity_id=1,
         entity_name="테스트 주제",
+        entity_wikidata_id="Q1",
         as_of=AS_OF,
     )
 
@@ -167,7 +186,13 @@ def test_claim_kind_must_match_trusted_evidence_kind() -> None:
 
 def test_claim_text_must_match_the_evidence_fact() -> None:
     causal = evidence(1, kind="CAUSAL_EVENT").model_copy(
-        update={"fact": {"cause": "공식 행사가 시작되었습니다.", "trusted_parser": True}}
+        update={
+            "fact": {
+                **evidence(1).fact,
+                "cause": "공식 행사가 시작되었습니다.",
+                "trusted_parser": True,
+            }
+        }
     )
 
     checked = EvidenceChecker().check(
@@ -180,4 +205,70 @@ def test_claim_text_must_match_the_evidence_fact() -> None:
 
     assert checked.status is EvidenceStatus.UNSUPPORTED
     assert checked.reason == "CLAIM_EVIDENCE_MISMATCH"
+    assert checked.publishable is False
+
+
+def test_kind_source_and_required_provenance_must_agree() -> None:
+    forged = evidence(1, kind="WIKIDATA_ENTITY").model_copy(
+        update={"fact": {"description": "임의 설명", "canonical_name": "테스트 주제"}}
+    )
+
+    checked = EvidenceChecker().check(
+        ClaimDraft(kind=ClaimKind.WHAT, text="테스트 주제: 임의 설명", evidence_ids=[1]),
+        [forged],
+        entity_id=1,
+        entity_name="테스트 주제",
+        as_of=AS_OF,
+    )
+
+    assert checked.status is EvidenceStatus.UNSUPPORTED
+    assert checked.reason == "INVALID_EVIDENCE_PROVENANCE"
+
+
+def test_non_string_source_timestamp_fails_closed() -> None:
+    malformed = evidence(1).model_copy(update={"fact": {"source_timestamp": 42}})
+
+    checked = EvidenceChecker().check(
+        ClaimDraft(
+            kind=ClaimKind.INTEREST,
+            text=interest_claim_text("테스트 주제", {Source.GOOGLE_TRENDS}),
+            evidence_ids=[1],
+        ),
+        [malformed],
+        entity_id=1,
+        entity_name="테스트 주제",
+        as_of=AS_OF,
+    )
+
+    assert checked.status is EvidenceStatus.UNSUPPORTED
+    assert checked.reason == "INVALID_EVIDENCE_PROVENANCE"
+
+
+def test_unselected_contradiction_blocks_publishable_claim() -> None:
+    supporting = evidence(1, kind="CAUSAL_EVENT").model_copy(
+        update={
+            "fact": {
+                **evidence(1).fact,
+                "cause": "공식 행사가 시작되었습니다.",
+                "trusted_parser": True,
+            }
+        }
+    )
+    contradiction = evidence(2, kind="CAUSAL_EVENT").model_copy(
+        update={"fact": {"contradicts_claim": True}}
+    )
+
+    checked = EvidenceChecker().check(
+        ClaimDraft(
+            kind=ClaimKind.CAUSE,
+            text="공식 행사가 시작되었습니다.",
+            evidence_ids=[1],
+        ),
+        [supporting, contradiction],
+        entity_id=1,
+        entity_name="테스트 주제",
+        as_of=AS_OF,
+    )
+
+    assert checked.status is EvidenceStatus.CONTRADICTED
     assert checked.publishable is False

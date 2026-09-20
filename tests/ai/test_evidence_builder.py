@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import base64
+import json
 from datetime import UTC, datetime, timedelta
+
+import pytest
 
 from app.ai.evidence import EvidenceBuilder
 from app.models.enums import (
@@ -28,7 +32,16 @@ from app.models.tables import (
 AS_OF = datetime(2026, 9, 20, 12, tzinfo=UTC)
 
 
-def test_builder_preserves_official_provenance_and_excludes_future_data(db_session) -> None:
+@pytest.mark.parametrize(
+    ("wikidata_collected_at", "expected_wikidata"),
+    [
+        (AS_OF - timedelta(minutes=5), True),
+        (AS_OF + timedelta(seconds=1), False),
+    ],
+)
+def test_builder_preserves_immutable_wikidata_provenance_and_excludes_future_data(
+    db_session, wikidata_collected_at: datetime, expected_wikidata: bool
+) -> None:
     google_run = CollectionRun(
         run_key="google:test",
         source=Source.GOOGLE_TRENDS,
@@ -55,8 +68,25 @@ def test_builder_preserves_official_provenance_and_excludes_future_data(db_sessi
     wikidata_payload = RawPayload(
         source=Source.WIKIDATA,
         payload_hash="w" * 64,
-        raw_payload={"encoding": "base64", "body": "AA=="},
-        collected_at=AS_OF - timedelta(minutes=5),
+        raw_payload={
+            "content_encoding": "base64",
+            "content_type": "application/octet-stream",
+            "data": base64.b64encode(
+                json.dumps(
+                    {
+                        "entities": {
+                            "Q1": {
+                                "labels": {"ko": {"value": "테스트 주제"}},
+                                "descriptions": {"ko": {"value": "과거 설명"}},
+                                "aliases": {},
+                                "claims": {"P31": []},
+                            }
+                        }
+                    }
+                ).encode()
+            ).decode(),
+        },
+        collected_at=wikidata_collected_at,
         source_timestamp=None,
         collector_version="wikidata-v1",
         parser_version="wikidata-parser-v1",
@@ -82,7 +112,7 @@ def test_builder_preserves_official_provenance_and_excludes_future_data(db_sessi
         run_id=wikidata_run.id,
         raw_payload_id=wikidata_payload.id,
         request_url=wikidata_url,
-        collected_at=AS_OF - timedelta(minutes=5),
+        collected_at=wikidata_collected_at,
         source_timestamp=None,
         collector_version="wikidata-v1",
         parser_version="wikidata-parser-v1",
@@ -117,7 +147,7 @@ def test_builder_preserves_official_provenance_and_excludes_future_data(db_sessi
     entity = TrendEntity(
         canonical_name="테스트 주제",
         normalized_name="테스트 주제",
-        description="검증 대상",
+        description="cutoff 이후 새 설명",
         wikidata_id="Q1",
         resolution_status=ResolutionStatus.RESOLVED,
         entity_types=["Q5"],
@@ -161,11 +191,17 @@ def test_builder_preserves_official_provenance_and_excludes_future_data(db_sessi
 
     built = EvidenceBuilder(db_session).build(entity, AS_OF)
 
-    assert [row.kind for row in built] == ["TREND_SIGNAL", "WIKIDATA_ENTITY"]
-    signal, wikidata = built
+    expected_kinds = ["TREND_SIGNAL", "WIKIDATA_ENTITY"] if expected_wikidata else ["TREND_SIGNAL"]
+    assert [row.kind for row in built] == expected_kinds
+    signal = built[0]
     assert signal.observation_id == observations[0].id
     assert signal.source_url == "https://trends.google.com/trending/rss?geo=KR"
     assert signal.fact["metrics"] == {"traffic": 101}
-    assert wikidata.source is Source.WIKIDATA
-    assert wikidata.source_url == wikidata_url
-    assert wikidata.fact["wikidata_id"] == "Q1"
+    if expected_wikidata:
+        wikidata = built[1]
+        assert wikidata.source is Source.WIKIDATA
+        assert wikidata.source_url == wikidata_url
+        assert wikidata.resolution_attempt_id == attempt.id
+        assert wikidata.raw_fetch_id == wikidata_fetch.id
+        assert wikidata.fact["wikidata_id"] == "Q1"
+        assert wikidata.fact["description"] == "과거 설명"

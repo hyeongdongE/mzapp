@@ -245,5 +245,14 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
   `snapshots=0 claims=0`; DB inspection confirmed zero claim/evidence rows because there were no
   eligible snapshots. Controlled tests persisted supported INTEREST and unknown-cause claims and
   separately verified pre-cutoff Wikidata provenance plus WHAT evidence matching.
-- Verification before independent review: 118 tests passed/9 opt-in integrations skipped; Ruff and
-  diff checks passed. Independent AI/Evidence review pending.
+- The first independent AI/Evidence review found three High paths: mutable post-cutoff entity fields
+  could be attached to older Wikidata provenance, evidence kind/source/fact/provenance combinations
+  were insufficiently validated, and an unselected contradiction could be omitted by a provider.
+- Fixes reparse exact cutoff-eligible Wikidata raw bytes, store attempt/raw-fetch FKs, validate
+  source-specific typed evidence plus database entity linkage, and check relevant contradictions
+  across all available evidence. Evidence/claim writes now have unique keys with savepoint recovery;
+  empty summaries are cached and every claim use is linked to its exact score snapshot.
+- Post-fix verification: 123 tests passed/10 opt-in integrations skipped; Ruff and diff checks passed.
+  Live PostgreSQL is at migration `0007`. A fresh PostgreSQL database migrated `0001 -> 0007` and
+  persisted supported CAUSE/INTEREST claims with evidence/snapshot links and a completed cache row;
+  the temporary database was removed. Reviewer revalidation pending.

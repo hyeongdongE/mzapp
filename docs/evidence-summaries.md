@@ -8,14 +8,17 @@ an LLM or a Meta API.
 1. Select resolved entities from the top `N` snapshots at the exact `as_of` and `score_version`.
 2. Materialize `TREND_SIGNAL` evidence only from linked observations whose source and acquisition
    timestamps are no later than `as_of`.
-3. Materialize `WIKIDATA_ENTITY` evidence only when its resolution attempt and raw-fetch provenance
-   were already available by `as_of`.
+3. Materialize `WIKIDATA_ENTITY` evidence only when its resolution attempt, raw fetch, and raw
+   payload were already available by `as_of`. The fact is reparsed from those immutable raw bytes;
+   mutable current entity metadata is never copied into historical evidence.
 4. Build structured `WHAT`, `INTEREST`, and `CAUSE` drafts with evidence IDs.
 5. Reject missing IDs, entity mismatches, future evidence, future source timestamps, non-HTTPS or
    non-allowlisted source URLs, claim/evidence-kind mismatches, and claim text that does not match
    the deterministic evidence rendering or explicit trusted causal fact before persistence.
-6. Persist every checked draft with its support status and `publishable` flag. Cache the result by
-   entity, canonical evidence-set hash, and prompt version.
+6. Persist every checked draft with its support status and `publishable` flag. Evidence rows retain
+   exact observation or resolution-attempt/raw-fetch FKs, while claim-to-snapshot links preserve the
+   scoring occurrence. Cache results, including empty results, by entity, canonical evidence-set
+   hash, and prompt version.
 
 `SUPPORTED` claims are publishable. `UNSUPPORTED` and `CONTRADICTED` claims are not. The current PoC
 does not opt any `PARTIALLY_SUPPORTED` claim into publication.
@@ -54,4 +57,6 @@ The Phase 5 live verification returned `snapshots=0 claims=0 provider=evidence-o
 inspection confirmed zero evidence and claim rows because Phase 4 intentionally suppressed the only
 resolved structural Wikimedia entity. This is an eligible-input result, not a provider failure.
 
-Verification: 118 tests passed, 9 opt-in integration tests skipped, and Ruff passed.
+Verification after independent-review fixes: 123 tests passed, 10 opt-in integration tests skipped,
+and Ruff passed. A fresh PostgreSQL database migrated through `0007` and persisted two supported
+claims with exact evidence and snapshot links; the temporary database was removed after inspection.

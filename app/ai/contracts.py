@@ -33,6 +33,9 @@ class CheckedClaim(BaseModel):
 class EvidenceRecord(BaseModel):
     id: int
     entity_id: int
+    observation_id: int | None = None
+    resolution_attempt_id: int | None = None
+    raw_fetch_id: int | None = None
     source: Source
     kind: str
     fact: dict[str, Any]

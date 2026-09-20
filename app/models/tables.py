@@ -284,11 +284,21 @@ class TrendSnapshot(Base):
 
 class Evidence(Base):
     __tablename__ = "evidence"
-    __table_args__ = (Index("ix_evidence_entity_time", "entity_id", "observed_at"),)
+    __table_args__ = (
+        UniqueConstraint("observation_id", name="uq_evidence_observation"),
+        UniqueConstraint(
+            "entity_id", "raw_fetch_id", "kind", name="uq_evidence_entity_raw_kind"
+        ),
+        Index("ix_evidence_entity_time", "entity_id", "observed_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     entity_id: Mapped[int] = mapped_column(ForeignKey("trend_entities.id"), nullable=False)
     observation_id: Mapped[int | None] = mapped_column(ForeignKey("source_observations.id"))
+    resolution_attempt_id: Mapped[int | None] = mapped_column(
+        ForeignKey("entity_resolution_attempts.id")
+    )
+    raw_fetch_id: Mapped[int | None] = mapped_column(ForeignKey("raw_fetches.id"))
     source: Mapped[Source] = mapped_column(enum_column(Source), nullable=False)
     kind: Mapped[str] = mapped_column(String(80), nullable=False)
     fact: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
@@ -301,7 +311,16 @@ class Evidence(Base):
 
 class Claim(Base):
     __tablename__ = "claims"
-    __table_args__ = (Index("ix_claim_entity_publishable", "entity_id", "publishable"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "entity_id",
+            "prompt_version",
+            "evidence_set_hash",
+            "kind",
+            name="uq_claim_cache_kind",
+        ),
+        Index("ix_claim_entity_publishable", "entity_id", "publishable"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     entity_id: Mapped[int] = mapped_column(ForeignKey("trend_entities.id"), nullable=False)
@@ -324,6 +343,38 @@ class ClaimEvidence(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     claim_id: Mapped[int] = mapped_column(ForeignKey("claims.id"), nullable=False)
     evidence_id: Mapped[int] = mapped_column(ForeignKey("evidence.id"), nullable=False)
+
+
+class ClaimSnapshot(Base):
+    __tablename__ = "claim_snapshots"
+    __table_args__ = (
+        UniqueConstraint("claim_id", "snapshot_id", name="uq_claim_snapshot"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    claim_id: Mapped[int] = mapped_column(ForeignKey("claims.id"), nullable=False)
+    snapshot_id: Mapped[int] = mapped_column(ForeignKey("trend_snapshots.id"), nullable=False)
+
+
+class SummaryCache(Base):
+    __tablename__ = "summary_cache"
+    __table_args__ = (
+        UniqueConstraint(
+            "entity_id",
+            "prompt_version",
+            "evidence_set_hash",
+            name="uq_summary_cache_key",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    entity_id: Mapped[int] = mapped_column(ForeignKey("trend_entities.id"), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    evidence_set_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    claims_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class Review(Base):

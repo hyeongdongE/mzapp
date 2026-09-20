@@ -165,6 +165,14 @@ def _parse_entity(entity_id: str, value: Any) -> WikidataMatch:
     )
 
 
+def parse_wikidata_entity(raw_bytes: bytes, entity_id: str) -> WikidataMatch | None:
+    payload = _json_object(raw_bytes)
+    entities = payload.get("entities")
+    if not isinstance(entities, dict) or entity_id not in entities:
+        return None
+    return _parse_entity(entity_id, entities[entity_id])
+
+
 def _language_value(values: dict[str, Any], language: str) -> str | None:
     value = values.get(language)
     if isinstance(value, dict) and isinstance(value.get("value"), str):

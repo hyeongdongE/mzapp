@@ -93,6 +93,8 @@ def test_schema_contains_replayable_pipeline_tables() -> None:
         "evidence",
         "claims",
         "claim_evidence",
+        "claim_snapshots",
+        "summary_cache",
         "reviews",
         "human_evaluations",
         "cost_records",
@@ -116,3 +118,11 @@ def test_derived_records_preserve_algorithm_versions() -> None:
     assert "classifier_version" in Base.metadata.tables["entity_classifications"].columns
     assert "score_version" in Base.metadata.tables["trend_snapshots"].columns
     assert "prompt_version" in Base.metadata.tables["claims"].columns
+
+
+def test_evidence_has_exact_source_provenance_foreign_keys() -> None:
+    evidence_columns = Base.metadata.tables["evidence"].columns
+
+    assert "observation_id" in evidence_columns
+    assert "resolution_attempt_id" in evidence_columns
+    assert "raw_fetch_id" in evidence_columns

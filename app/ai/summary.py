@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.ai.contracts import (
@@ -21,7 +22,14 @@ from app.ai.contracts import (
 )
 from app.ai.evidence import EvidenceBuilder, EvidenceChecker, evidence_record
 from app.models.enums import ResolutionStatus
-from app.models.tables import Claim, ClaimEvidence, TrendEntity, TrendSnapshot
+from app.models.tables import (
+    Claim,
+    ClaimEvidence,
+    ClaimSnapshot,
+    SummaryCache,
+    TrendEntity,
+    TrendSnapshot,
+)
 
 
 class ProviderDisabled(RuntimeError):
@@ -127,7 +135,7 @@ class SummaryService:
             .limit(top_n)
         ).all()
         generated: list[Claim] = []
-        for _snapshot, entity in ranked:
+        for snapshot, entity in ranked:
             evidence_rows = self._builder.build(entity, as_of)
             evidence = [evidence_record(row) for row in evidence_rows]
             if not evidence:
@@ -144,7 +152,26 @@ class SummaryService:
                     .order_by(Claim.id)
                 )
             )
+            cache_row = self._session.scalar(
+                select(SummaryCache).where(
+                    SummaryCache.entity_id == entity.id,
+                    SummaryCache.evidence_set_hash == evidence_hash,
+                    SummaryCache.prompt_version == prompt_version,
+                )
+            )
+            if cache_row is not None:
+                if cache_row.claims_count != len(cached):
+                    raise RuntimeError("summary cache claim count mismatch")
+                for claim in cached:
+                    self._link_snapshot(claim.id, snapshot.id)
+                generated.extend(cached)
+                continue
             if cached:
+                self._persist_cache(
+                    entity.id, prompt_version, evidence_hash, len(cached)
+                )
+                for claim in cached:
+                    self._link_snapshot(claim.id, snapshot.id)
                 generated.extend(cached)
                 continue
             summary = await self._provider.summarize(
@@ -163,28 +190,114 @@ class SummaryService:
                     evidence,
                     entity_id=entity.id,
                     entity_name=entity.canonical_name,
+                    entity_wikidata_id=entity.wikidata_id,
                     as_of=as_of,
                 )
-                claim = Claim(
-                    entity_id=entity.id,
-                    kind=draft.kind.value,
-                    text=draft.text,
-                    status=checked.status,
-                    reason=checked.reason,
-                    publishable=checked.publishable,
-                    prompt_version=prompt_version,
-                    evidence_set_hash=evidence_hash,
+                claim, created = self._persist_claim(
+                    Claim(
+                        entity_id=entity.id,
+                        kind=draft.kind.value,
+                        text=draft.text,
+                        status=checked.status,
+                        reason=checked.reason,
+                        publishable=checked.publishable,
+                        prompt_version=prompt_version,
+                        evidence_set_hash=evidence_hash,
+                    )
                 )
-                self._session.add(claim)
-                self._session.flush()
-                self._session.add_all(
-                    ClaimEvidence(claim_id=claim.id, evidence_id=evidence_id)
-                    for evidence_id in dict.fromkeys(draft.evidence_ids)
-                    if evidence_id in evidence_by_id
-                )
+                if created:
+                    self._session.add_all(
+                        ClaimEvidence(claim_id=claim.id, evidence_id=evidence_id)
+                        for evidence_id in dict.fromkeys(draft.evidence_ids)
+                        if evidence_id in evidence_by_id
+                    )
+                    self._session.flush()
+                self._link_snapshot(claim.id, snapshot.id)
                 generated.append(claim)
+            self._persist_cache(
+                entity.id,
+                prompt_version,
+                evidence_hash,
+                len(summary.claims),
+            )
         self._session.flush()
         return generated
+
+    def _persist_claim(self, proposed: Claim) -> tuple[Claim, bool]:
+        try:
+            with self._session.begin_nested():
+                self._session.add(proposed)
+                self._session.flush()
+            return proposed, True
+        except IntegrityError:
+            existing = self._session.scalar(
+                select(Claim).where(
+                    Claim.entity_id == proposed.entity_id,
+                    Claim.prompt_version == proposed.prompt_version,
+                    Claim.evidence_set_hash == proposed.evidence_set_hash,
+                    Claim.kind == proposed.kind,
+                )
+            )
+            if existing is None:
+                raise
+            return existing, False
+
+    def _link_snapshot(self, claim_id: int, snapshot_id: int) -> None:
+        existing = self._session.scalar(
+            select(ClaimSnapshot).where(
+                ClaimSnapshot.claim_id == claim_id,
+                ClaimSnapshot.snapshot_id == snapshot_id,
+            )
+        )
+        if existing is not None:
+            return
+        try:
+            with self._session.begin_nested():
+                self._session.add(
+                    ClaimSnapshot(claim_id=claim_id, snapshot_id=snapshot_id)
+                )
+                self._session.flush()
+        except IntegrityError:
+            existing = self._session.scalar(
+                select(ClaimSnapshot).where(
+                    ClaimSnapshot.claim_id == claim_id,
+                    ClaimSnapshot.snapshot_id == snapshot_id,
+                )
+            )
+            if existing is None:
+                raise
+
+    def _persist_cache(
+        self,
+        entity_id: int,
+        prompt_version: str,
+        evidence_set_hash: str,
+        claims_count: int,
+    ) -> SummaryCache:
+        proposed = SummaryCache(
+            entity_id=entity_id,
+            prompt_version=prompt_version,
+            evidence_set_hash=evidence_set_hash,
+            claims_count=claims_count,
+        )
+        try:
+            with self._session.begin_nested():
+                self._session.add(proposed)
+                self._session.flush()
+            return proposed
+        except IntegrityError as exc:
+            existing = self._session.scalar(
+                select(SummaryCache).where(
+                    SummaryCache.entity_id == entity_id,
+                    SummaryCache.prompt_version == prompt_version,
+                    SummaryCache.evidence_set_hash == evidence_set_hash,
+                )
+            )
+            if existing is None:
+                raise
+            if existing.claims_count != claims_count:
+                raise RuntimeError("concurrent summary cache result mismatch") from exc
+            return existing
 
 
 def _evidence_set_hash(evidence: list[EvidenceRecord]) -> str:

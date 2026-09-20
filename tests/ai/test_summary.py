@@ -21,6 +21,7 @@ from app.ai.summary import (
     SummaryService,
 )
 from app.models.enums import (
+    CandidateStatus,
     ResolutionStatus,
     ReviewStatus,
     RunKind,
@@ -28,7 +29,21 @@ from app.models.enums import (
     Source,
     TrendLifecycle,
 )
-from app.models.tables import Claim, Evidence, PipelineRun, TrendEntity, TrendSnapshot
+from app.models.tables import (
+    CandidateObservation,
+    Claim,
+    ClaimSnapshot,
+    CollectionRun,
+    EntityCandidate,
+    Evidence,
+    PipelineRun,
+    RawPayload,
+    SourceObservation,
+    SummaryCache,
+    TrendCandidate,
+    TrendEntity,
+    TrendSnapshot,
+)
 
 AS_OF = datetime(2026, 9, 20, 12, tzinfo=UTC)
 
@@ -112,6 +127,16 @@ class SpyProvider:
         )
 
 
+class EmptySpyProvider:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def summarize(self, context: SummaryContext) -> SummaryResult:
+        del context
+        self.calls += 1
+        return SummaryResult(claims=[], why=UNKNOWN_CAUSE_MESSAGE)
+
+
 @pytest.mark.asyncio
 async def test_only_top_n_invokes_provider_and_claims_are_cached(db_session) -> None:
     run = PipelineRun(
@@ -140,7 +165,66 @@ async def test_only_top_n_invokes_provider_and_claims_are_cached(db_session) -> 
     ]
     db_session.add_all([run, *entities])
     db_session.flush()
-    for entity, score in zip(entities, (90.0, 80.0), strict=True):
+    for index, (entity, score) in enumerate(
+        zip(entities, (90.0, 80.0), strict=True), start=1
+    ):
+        collection = CollectionRun(
+            run_key=f"summary:{index}",
+            source=Source.GOOGLE_TRENDS,
+            started_at=AS_OF,
+            completed_at=AS_OF,
+            status=RunStatus.SUCCEEDED,
+        )
+        payload = RawPayload(
+            source=Source.GOOGLE_TRENDS,
+            payload_hash=f"{index:064d}",
+            raw_payload={"data": ""},
+            collected_at=AS_OF,
+            source_timestamp=AS_OF,
+            collector_version="test",
+            parser_version="test",
+        )
+        db_session.add_all([collection, payload])
+        db_session.flush()
+        observation = SourceObservation(
+            run_id=collection.id,
+            raw_payload_id=payload.id,
+            source=Source.GOOGLE_TRENDS,
+            source_item_id=f"summary:{index}",
+            canonical_text=entity.canonical_name,
+            source_timestamp=AS_OF,
+            observed_at=AS_OF,
+            source_url="https://trends.google.com/trending/rss?geo=KR",
+            metrics={"traffic": score},
+        )
+        db_session.add(observation)
+        db_session.flush()
+        candidate = TrendCandidate(
+            source=Source.GOOGLE_TRENDS,
+            canonical_text=entity.canonical_name,
+            normalized_text=entity.normalized_name,
+            first_seen_at=AS_OF,
+            last_seen_at=AS_OF,
+            status=CandidateStatus.ACTIVE,
+            resolution_status=ResolutionStatus.RESOLVED,
+            normalizer_version="normalizer-v1",
+            generation=1,
+        )
+        db_session.add(candidate)
+        db_session.flush()
+        db_session.add_all(
+            [
+                CandidateObservation(
+                    candidate_id=candidate.id, observation_id=observation.id
+                ),
+                EntityCandidate(
+                    entity_id=entity.id,
+                    candidate_id=candidate.id,
+                    entity_version="entity-v1",
+                    match_reason="test",
+                ),
+            ]
+        )
         db_session.add_all(
             [
                 TrendSnapshot(
@@ -156,10 +240,14 @@ async def test_only_top_n_invokes_provider_and_claims_are_cached(db_session) -> 
                 ),
                 Evidence(
                     entity_id=entity.id,
-                    observation_id=None,
+                    observation_id=observation.id,
                     source=Source.GOOGLE_TRENDS,
                     kind="TREND_SIGNAL",
-                    fact={"metric": score},
+                    fact={
+                        "canonical_text": entity.canonical_name,
+                        "metrics": {"traffic": score},
+                        "source_timestamp": AS_OF.isoformat(),
+                    },
                     source_url="https://trends.google.com/trending/rss?geo=KR",
                     observed_at=AS_OF,
                 ),
@@ -179,6 +267,21 @@ async def test_only_top_n_invokes_provider_and_claims_are_cached(db_session) -> 
     assert provider.entity_ids == [entities[0].id]
     assert [claim.id for claim in first] == [claim.id for claim in second]
     assert db_session.scalar(select(func.count()).select_from(Claim)) == 1
+    assert db_session.scalar(select(func.count()).select_from(ClaimSnapshot)) == 1
     persisted = first[0]
     assert persisted.publishable is True
     assert persisted.status.value == "SUPPORTED"
+
+    empty_provider = EmptySpyProvider()
+    empty_service = SummaryService(db_session, provider=empty_provider)
+    empty_first = await empty_service.generate_top(
+        as_of=AS_OF, top_n=1, prompt_version="prompt-empty", score_version="score-v1"
+    )
+    empty_second = await empty_service.generate_top(
+        as_of=AS_OF, top_n=1, prompt_version="prompt-empty", score_version="score-v1"
+    )
+
+    assert empty_first == []
+    assert empty_second == []
+    assert empty_provider.calls == 1
+    assert db_session.scalar(select(func.count()).select_from(SummaryCache)) == 2
