@@ -18,6 +18,25 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    ambiguous_candidate_id = op.get_bind().execute(
+        sa.text(
+            """
+            SELECT candidate_id
+            FROM entity_candidates
+            GROUP BY candidate_id
+            HAVING count(DISTINCT entity_id) > 1
+            ORDER BY candidate_id
+            LIMIT 1
+            """
+        )
+    ).scalar_one_or_none()
+    if ambiguous_candidate_id is not None:
+        raise RuntimeError(
+            "migration 0005 found an ambiguous legacy entity link for "
+            f"candidate_id={ambiguous_candidate_id}; review that candidate, retain exactly one "
+            "entity_candidates row, and rerun the migration"
+        )
+
     op.add_column(
         "trend_candidates",
         sa.Column("generation", sa.Integer(), server_default="1", nullable=False),
@@ -95,6 +114,23 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    duplicate_generation = op.get_bind().execute(
+        sa.text(
+            """
+            SELECT source, normalized_text
+            FROM trend_candidates
+            GROUP BY source, normalized_text
+            HAVING count(*) > 1
+            LIMIT 1
+            """
+        )
+    ).first()
+    if duplicate_generation is not None:
+        raise RuntimeError(
+            "migration 0005 downgrade cannot represent multiple candidate generations; "
+            f"resolve source={duplicate_generation[0]} normalized_text={duplicate_generation[1]!r} "
+            "before downgrading"
+        )
     op.drop_table("entity_resolution_attempt_raw_fetches")
     op.drop_constraint(
         "fk_resolution_attempt_entity", "entity_resolution_attempts", type_="foreignkey"

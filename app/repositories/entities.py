@@ -92,17 +92,37 @@ class EntityRepository:
                 EntityAlias.language == language,
             )
         )
-        if existing is None:
-            self._session.add(
-                EntityAlias(
-                    entity_id=entity_id,
-                    alias=alias,
-                    normalized_alias=normalized,
-                    language=language,
-                    source=source,
-                    approved=approved,
+        if existing is not None:
+            if approved and not existing.approved:
+                existing.approved = True
+                existing.source = source
+            return
+        try:
+            with self._session.begin_nested():
+                self._session.add(
+                    EntityAlias(
+                        entity_id=entity_id,
+                        alias=alias,
+                        normalized_alias=normalized,
+                        language=language,
+                        source=source,
+                        approved=approved,
+                    )
+                )
+                self._session.flush()
+        except IntegrityError:
+            existing = self._session.scalar(
+                select(EntityAlias).where(
+                    EntityAlias.entity_id == entity_id,
+                    EntityAlias.normalized_alias == normalized,
+                    EntityAlias.language == language,
                 )
             )
+            if existing is None:
+                raise
+            if approved and not existing.approved:
+                existing.approved = True
+                existing.source = source
 
     def link_candidate(self, entity_id: int, candidate_id: int, reason: str) -> bool:
         existing = self._session.scalar(

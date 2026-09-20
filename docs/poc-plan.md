@@ -188,3 +188,9 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
   entity 1, and raw fetch FKs 11/12. A stale-cutoff command produced zero new fetches and zero runs.
 - A fresh PostgreSQL database migrated `0001 -> 0005` (21 tables), and the real concurrent QID
   get-or-create regression passed; the temporary verification database was then removed.
+- Final gate follow-up made alias insert idempotent under concurrent full resolver calls and added a
+  transactional `0005` preflight for legacy candidates already linked to multiple entities. The
+  preflight reports the exact candidate without altering its two links; recovery is documented.
+- PostgreSQL verification passed two concurrency cases (QID creation and full resolver alias/link
+  race) plus the damaged-`0004` migration fixture. Future cutoffs beyond five-minute clock skew are
+  rejected before request/run creation. Temporary verification databases were removed.

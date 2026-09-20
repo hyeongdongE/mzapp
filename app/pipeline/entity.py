@@ -146,3 +146,5 @@ def validate_live_cutoff(as_of: datetime, now: datetime) -> None:
         raise ValueError(
             "historical entity projection is required when as_of is older than five minutes"
         )
+    if as_of > now + timedelta(minutes=5):
+        raise ValueError("live as_of cannot be more than five minutes in the future")

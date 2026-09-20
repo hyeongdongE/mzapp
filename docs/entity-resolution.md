@@ -34,7 +34,22 @@ and never as instructions.
 Entity-stage `REPLAY` is deliberately rejected until Phase 8 provides a historical entity/alias
 projection. `LIVE` cutoffs older than five minutes are rejected by both the service and resolver
 before any request, preventing a caller from backdating current Wikidata through a mislabeled live
-run. This prevents a past cutoff from consulting current Wikidata or aliases learned later.
+run. Cutoffs more than five minutes in the future are rejected as well. This prevents a past cutoff
+from consulting current Wikidata or aliases learned later and keeps cutoff/event ordering coherent.
+
+Entity, alias, candidate, and entity-link get-or-create operations use database uniqueness plus
+savepoint recovery. PostgreSQL concurrency tests cover both duplicate QID creation and two complete
+resolvers racing to add the same aliases while linking separate source candidates.
+
+## Migration 0005 integrity preflight
+
+`0005` never guesses which entity is correct if a pre-fix `0004` database already contains multiple
+entity links for one candidate. It aborts transactionally with the exact `candidate_id`, leaving the
+database at `0004` and all links intact. Review that candidate, retain exactly one correct
+`entity_candidates` row (or remove all links to force later review), then rerun the migration.
+Downgrade likewise refuses to collapse multiple candidate generations into the older schema; resolve
+those generations explicitly before downgrading. Both fail-fast paths preserve data rather than
+silently choosing or deleting it.
 
 ## Live smoke (2026-09-20)
 

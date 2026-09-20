@@ -129,3 +129,21 @@ async def test_live_pipeline_rejects_stale_cutoff_before_creating_run(db_session
         ).build_entities(AS_OF)
 
     assert db_session.scalar(select(func.count()).select_from(PipelineRun)) == 0
+
+
+@pytest.mark.asyncio
+async def test_live_pipeline_rejects_future_cutoff_before_creating_run(db_session) -> None:
+    class UnexpectedWikidata:
+        collector_version = "wikidata-api-v1"
+
+        async def lookup(self, _query: str):
+            raise AssertionError("future cutoff must not call Wikidata")
+
+    with pytest.raises(ValueError, match="future"):
+        await PipelineService(
+            db_session,
+            UnexpectedWikidata(),
+            now=lambda: AS_OF - timedelta(minutes=6),
+        ).build_entities(AS_OF)
+
+    assert db_session.scalar(select(func.count()).select_from(PipelineRun)) == 0
