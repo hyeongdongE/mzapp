@@ -165,6 +165,7 @@ class TrendEntity(Base):
     canonical_name: Mapped[str] = mapped_column(String(500), nullable=False)
     normalized_name: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
     entity_type: Mapped[str | None] = mapped_column(String(160))
+    description: Mapped[str | None] = mapped_column(Text)
     wikidata_id: Mapped[str | None] = mapped_column(String(32), index=True)
     resolution_status: Mapped[ResolutionStatus] = mapped_column(
         enum_column(ResolutionStatus), nullable=False

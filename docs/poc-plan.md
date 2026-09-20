@@ -164,3 +164,8 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
   focused Wikidata/candidate/entity/pipeline suite 13 passed.
 - Live Compose smoke at `2026-09-20T15:00:00Z` created 32 source-scoped candidates, retained two
   official Wikidata raw fetches, resolved one entity, and marked pipeline run 1 `SUCCEEDED`.
+- Classification slice added migration `0003` for Wikidata descriptions, explicit versioned
+  instance/description rules, append-only history, and `OTHER / 0.0 / NO_MATCH_NEEDS_REVIEW`
+  fallback. Full suite reached 57 passed/4 opt-in skipped.
+- Live pipeline run 2 completed on PostgreSQL `0003`; its legacy entity lacked pre-migration
+  description data and therefore correctly persisted the review fallback instead of guessing.

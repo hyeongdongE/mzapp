@@ -96,6 +96,7 @@ async def test_single_exact_wikidata_match_creates_aliases_and_link(db_session):
     entity = db_session.scalar(select(TrendEntity).where(TrendEntity.id == result.entity_id))
     assert entity is not None
     assert entity.wikidata_id == "Q123"
+    assert entity.description == "대한민국의 농구 선수"
     assert entity.review_status is ReviewStatus.PENDING
     aliases = set(db_session.scalars(select(EntityAlias.alias)))
     assert {"이현중", "Lee Hyunjung", "이현중 농구"} <= aliases

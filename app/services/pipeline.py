@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 from app.collectors.base import CollectionBatch
 from app.collectors.wikidata import WikidataClient, WikidataRawResponse
 from app.models.enums import RunKind, RunStatus, Source
-from app.models.tables import PipelineRun, SourceObservation, TrendCandidate
+from app.models.tables import PipelineRun, SourceObservation, TrendCandidate, TrendEntity
 from app.pipeline.candidate import CandidateGenerator
+from app.pipeline.classification import EntityClassifier
 from app.pipeline.entity import EntityResolver
 from app.services.collection import CollectionService
 
@@ -91,6 +92,14 @@ class PipelineService:
                 result = await resolver.resolve(candidate, as_of)
                 for response in result.raw_responses:
                     self._persist_wikidata_raw(response)
+            classifier = EntityClassifier()
+            for entity in self._session.scalars(select(TrendEntity).order_by(TrendEntity.id)):
+                classifier.persist(
+                    self._session,
+                    entity,
+                    pipeline_run_id=run.id,
+                    classified_at=as_of,
+                )
         except Exception:
             run.status = RunStatus.FAILED
             run.completed_at = self._now().astimezone(UTC)

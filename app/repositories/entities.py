@@ -40,12 +40,14 @@ class EntityRepository:
         normalized_name: str,
         wikidata_id: str | None,
         entity_type: str | None,
+        description: str | None = None,
     ) -> TrendEntity:
         entity = TrendEntity(
             canonical_name=canonical_name,
             normalized_name=normalized_name,
             wikidata_id=wikidata_id,
             entity_type=entity_type,
+            description=description,
             resolution_status=ResolutionStatus.RESOLVED,
             review_status=ReviewStatus.PENDING,
             version=1,

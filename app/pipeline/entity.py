@@ -49,6 +49,7 @@ class EntityResolver:
                 normalized_name=normalize_text(match.label),
                 wikidata_id=match.entity_id,
                 entity_type=match.instance_of[0] if match.instance_of else None,
+                description=match.description,
             )
         self._repo.add_alias(entity.id, match.label)
         for alias in match.aliases:
