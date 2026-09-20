@@ -59,8 +59,10 @@ same persistence, baseline, news-only, and cross-source rules apply to event spi
 Rules use precedence `COOLING`, `HOT`, `RISING`, `NEW`:
 
 - `COOLING`: prior `RISING`/`HOT` and current strength is at most 60% of the previous window.
-- `HOT`: score at least 70, with three distinct six-hour observation buckets or observations spanning
-  at least six hours. Re-running the same data never creates persistence.
+- `HOT`: score at least 70, with persisted high-score snapshots in three distinct six-hour periods
+  or a continuously sampled high-score tail spanning at least six hours. A low-score snapshot or a
+  gap longer than the sampling tolerance breaks the tail. Raw source timestamp gaps and repeated
+  runs inside one period never create persistence.
 - `RISING`: at least two current observations and strength at least 25% above the previous window
   (or positive after an empty previous window).
 - `NEW`: first seen within 24 hours, absent from baseline.
@@ -73,9 +75,8 @@ return the single committed row.
 
 ## Verification
 
-- Unit/full regression after review fixes: 99 passed and 9 opt-in integration tests skipped; Ruff
-  passed.
-- Live PoC DB run 10 completed with zero snapshots because its only resolved entity was an old
+- Unit/full regression after review fixes: see the Phase 4 verification record in `poc-plan.md`.
+- Live PoC DB runs 10 and 11 completed with zero snapshots because their only resolved entity was an old
   structural Wikimedia baseline item. This is intentional suppression, not missing output.
 - A fresh PostgreSQL database persisted a two-window Google fixture as `RISING`, score `60.0`, with
   news-only penalty `1.0`, UTC timestamps, and the complete JSON breakdown. The temporary database

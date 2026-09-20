@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import func, select
@@ -26,7 +27,7 @@ from app.models.tables import (
     TrendSnapshot,
 )
 from app.pipeline.baseline import SignalPoint
-from app.pipeline.detection import FeatureExtractor, TrendDetector
+from app.pipeline.detection import FeatureExtractor, TrendDetector, _high_score_state
 from app.pipeline.lifecycle import LifecycleContext, LifecycleDetector
 from app.pipeline.scoring import ExplainableScorer
 from app.repositories.entities import EntityRepository
@@ -144,12 +145,12 @@ def test_repeated_same_source_item_is_one_observation_window() -> None:
     assert lifecycle is TrendLifecycle.NEW
 
 
-def test_repeated_scoring_cannot_turn_one_time_bucket_hot() -> None:
+def test_wikimedia_lag_does_not_count_as_high_score_duration() -> None:
     extracted = FeatureExtractor().extract(
         [
             point(1, metric=1_000_000, source_item_key="google-item"),
             point(
-                1,
+                60,
                 source=Source.WIKIMEDIA,
                 metric=10_000_000,
                 source_item_key="wikimedia-item",
@@ -158,6 +159,7 @@ def test_repeated_scoring_cannot_turn_one_time_bucket_hot() -> None:
         AS_OF,
     )
     score = ExplainableScorer().score(extracted.signal)
+    high_windows, high_duration = _high_score_state([], AS_OF, score.total)
 
     lifecycle = LifecycleDetector().detect(
         LifecycleContext(
@@ -167,15 +169,38 @@ def test_repeated_scoring_cannot_turn_one_time_bucket_hot() -> None:
             current_observations=extracted.current_windows,
             score=score.total,
             baseline_presence=0,
-            high_score_windows=extracted.current_windows,
-            high_score_duration_hours=extracted.current_span_hours,
+            high_score_windows=high_windows,
+            high_score_duration_hours=high_duration,
         ),
         AS_OF,
     )
 
     assert score.total >= 70
-    assert extracted.current_windows == 1
-    assert lifecycle is TrendLifecycle.NEW
+    assert extracted.current_span_hours == 59
+    assert high_windows == 1
+    assert high_duration == 0
+    assert lifecycle is TrendLifecycle.RISING
+
+
+def test_high_score_history_uses_distinct_persisted_windows_not_run_count() -> None:
+    repeated_runs = [
+        SimpleNamespace(as_of=AS_OF - timedelta(minutes=minute), total_score=90)
+        for minute in (3, 2, 1)
+    ]
+
+    windows, duration = _high_score_state(repeated_runs, AS_OF, 90)
+
+    assert windows == 1
+    assert duration == 3 / 60
+
+
+def test_high_score_history_requires_actual_six_hour_persistence() -> None:
+    history = [SimpleNamespace(as_of=AS_OF - timedelta(hours=6), total_score=90)]
+
+    windows, duration = _high_score_state(history, AS_OF, 90)
+
+    assert windows == 2
+    assert duration == 6
 
 
 def _add_observation(

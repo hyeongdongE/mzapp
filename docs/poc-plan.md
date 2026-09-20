@@ -217,5 +217,11 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
   and five Medium counterexamples. Fixes now derive first-seen only from cutoff-eligible observations,
   require real observation buckets, assign zero strength to missing metrics, deduplicate repeated
   official items, enforce resolved status inside the detector, and recover concurrent snapshot races.
-- Post-fix verification: 99 local tests passed/9 opt-in integrations skipped; Ruff passed. A forced
+- Post-fix verification: 101 local tests passed/9 opt-in integrations skipped; Ruff passed. A forced
   PostgreSQL concurrent insert returned one idempotent snapshot row. Reviewer revalidation pending.
+- The re-review found one remaining Medium case where the raw Wikimedia/Google timestamp span could
+  make a newly combined signal immediately `HOT`. HOT duration now comes only from the persisted,
+  contiguous high-score snapshot tail, grouped relative to the current cutoff so scheduler reruns
+  and wall-clock bucket boundaries cannot inflate persistence. Final reviewer revalidation pending.
+- Live PostgreSQL score run 11 completed `SUCCEEDED`; it again produced zero snapshots for the sole
+  resolved structural Wikimedia entity, and direct DB inspection confirmed zero persisted snapshots.

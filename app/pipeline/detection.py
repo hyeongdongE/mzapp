@@ -193,6 +193,21 @@ class TrendDetector:
             )
             .order_by(TrendSnapshot.as_of.desc())
         )
+        recent_snapshots = list(
+            self._session.scalars(
+                select(TrendSnapshot)
+                .where(
+                    TrendSnapshot.entity_id == entity_id,
+                    TrendSnapshot.as_of < as_of,
+                    TrendSnapshot.as_of >= as_of - CURRENT_WINDOW,
+                    TrendSnapshot.score_version == self._score_version,
+                )
+                .order_by(TrendSnapshot.as_of)
+            )
+        )
+        high_windows, high_duration = _high_score_state(
+            recent_snapshots, as_of, score.total
+        )
         if features.current_observations == 0 and (
             previous is None
             or previous.lifecycle not in {TrendLifecycle.RISING, TrendLifecycle.HOT}
@@ -212,8 +227,8 @@ class TrendDetector:
                     score=score.total,
                     baseline_presence=features.baseline.presence_ratio,
                     previous_lifecycle=previous.lifecycle if previous else None,
-                    high_score_windows=features.current_windows,
-                    high_score_duration_hours=features.current_span_hours,
+                    high_score_windows=high_windows,
+                    high_score_duration_hours=high_duration,
                 ),
                 as_of,
             )
@@ -341,6 +356,29 @@ def _deduplicate_occurrences(points: list[SignalPoint]) -> list[SignalPoint]:
         seen.add(key)
         deduplicated.append(point)
     return deduplicated
+
+
+def _high_score_state(
+    snapshots: list[TrendSnapshot], as_of: datetime, current_score: float
+) -> tuple[int, float]:
+    if current_score < 70:
+        return 0, 0.0
+    high_tail: list[datetime] = [as_of]
+    later = as_of
+    for snapshot in reversed(snapshots):
+        snapshot_time = _as_utc(snapshot.as_of)
+        if snapshot.total_score < 70:
+            break
+        if later - snapshot_time > timedelta(hours=6, minutes=5):
+            break
+        high_tail.append(snapshot_time)
+        later = snapshot_time
+    distinct_windows = {
+        int((as_of - timestamp).total_seconds() // (6 * 3600))
+        for timestamp in high_tail
+    }
+    duration_hours = (as_of - min(high_tail)).total_seconds() / 3600
+    return len(distinct_windows), round(duration_hours, 6)
 
 
 def _as_utc(value: datetime) -> datetime:
