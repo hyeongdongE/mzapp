@@ -1,0 +1,83 @@
+from enum import StrEnum
+
+
+class Source(StrEnum):
+    GOOGLE_TRENDS = "GOOGLE_TRENDS"
+    WIKIMEDIA = "WIKIMEDIA"
+    WIKIDATA = "WIKIDATA"
+
+
+class RunStatus(StrEnum):
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+
+
+class RunKind(StrEnum):
+    LIVE = "LIVE"
+    REPLAY = "REPLAY"
+
+
+class CandidateStatus(StrEnum):
+    NEW = "NEW"
+    ACTIVE = "ACTIVE"
+    REJECTED = "REJECTED"
+    MERGED = "MERGED"
+
+
+class ResolutionStatus(StrEnum):
+    RESOLVED = "RESOLVED"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+
+
+class Category(StrEnum):
+    SPORTS = "SPORTS"
+    ENTERTAINMENT = "ENTERTAINMENT"
+    FOOD = "FOOD"
+    GAME = "GAME"
+    AI_TECH = "AI_TECH"
+    MEME_INTERNET = "MEME_INTERNET"
+    FASHION_BEAUTY = "FASHION_BEAUTY"
+    SHOPPING_PRODUCT = "SHOPPING_PRODUCT"
+    OTHER = "OTHER"
+
+
+class TrendLifecycle(StrEnum):
+    NEW = "NEW"
+    RISING = "RISING"
+    HOT = "HOT"
+    COOLING = "COOLING"
+
+
+class EvidenceStatus(StrEnum):
+    SUPPORTED = "SUPPORTED"
+    PARTIALLY_SUPPORTED = "PARTIALLY_SUPPORTED"
+    UNSUPPORTED = "UNSUPPORTED"
+    CONTRADICTED = "CONTRADICTED"
+
+
+class ReviewStatus(StrEnum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    NOISE = "NOISE"
+
+
+class ReviewAction(StrEnum):
+    APPROVE = "APPROVE"
+    REJECT = "REJECT"
+    MERGE = "MERGE"
+    SPLIT = "SPLIT"
+    CHANGE_CATEGORY = "CHANGE_CATEGORY"
+    MARK_NOISE = "MARK_NOISE"
+
+
+class HumanEvaluationLabel(StrEnum):
+    VALID_TREND = "VALID_TREND"
+    TOO_OBVIOUS = "TOO_OBVIOUS"
+    NEWS_ONLY = "NEWS_ONLY"
+    DUPLICATE = "DUPLICATE"
+    WRONG_CATEGORY = "WRONG_CATEGORY"
+    BAD_ENTITY_MERGE = "BAD_ENTITY_MERGE"
+    NOT_USEFUL = "NOT_USEFUL"
+    INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"

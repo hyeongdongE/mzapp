@@ -102,3 +102,17 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
 6. Review: FastAPI/Jinja dashboard and review actions
 7. Evaluation: daily/weekly metrics and Markdown reports
 8. Operations: scheduler, replay, leakage-safe backtest, end-to-end verification and README
+
+## Implementation status
+
+### Phase 0 — Preflight and foundation (completed 2026-09-20)
+
+- Repository initialized and implementation isolated in a managed worktree.
+- Python 3.12.14 runtime and locked `uv` environment created.
+- PostgreSQL 16 schema, SQLAlchemy models, Alembic initial migration, FastAPI health endpoint,
+  Dockerfile, and Docker Compose services implemented.
+- Migration `upgrade -> downgrade -> upgrade` verified against both SQLite and PostgreSQL 16.
+- PostgreSQL inspection confirmed all 17 application tables plus `alembic_version`.
+- Foundation verification: 8 tests passed; Ruff checks passed; `/healthz` returned
+  `{"status":"ok"}` from the Compose API container.
+- External providers remain disabled and no collector request is executed by Phase 0 code.
