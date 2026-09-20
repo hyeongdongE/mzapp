@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.ai.contracts import SummaryProvider
+from app.ai.summary import SummaryService
 from app.collectors.base import CollectionBatch
 from app.collectors.wikidata import WikidataClient, WikidataRawResponse
 from app.models.enums import RunKind, RunStatus, Source
@@ -59,10 +61,14 @@ class PipelineService:
         wikidata: WikidataClient,
         *,
         now: Callable[[], datetime] | None = None,
+        summary_provider: SummaryProvider | None = None,
+        summary_top_n: int = 20,
     ) -> None:
         self._session = session
         self._wikidata = wikidata
         self._now = now or (lambda: datetime.now(UTC))
+        self._summary_provider = summary_provider
+        self._summary_top_n = summary_top_n
 
     async def build_entities(
         self,
@@ -158,6 +164,14 @@ class PipelineService:
                     classified_at=self._now().astimezone(UTC),
                 )
                 detector.snapshot(entity.id, as_of, pipeline_run_id=run.id)
+            await SummaryService(
+                self._session, provider=self._summary_provider
+            ).generate_top(
+                as_of=as_of,
+                top_n=self._summary_top_n,
+                prompt_version=versions.prompt,
+                score_version=versions.score,
+            )
         except Exception:
             run.status = RunStatus.FAILED
             run.completed_at = self._now().astimezone(UTC)

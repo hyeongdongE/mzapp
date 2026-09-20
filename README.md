@@ -11,3 +11,4 @@ Current implementation notes:
 - `docs/entity-resolution.md`
 - `docs/classification.md`
 - `docs/trend-scoring.md`
+- `docs/evidence-summaries.md`

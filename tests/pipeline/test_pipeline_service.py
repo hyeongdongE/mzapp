@@ -3,11 +3,14 @@ from datetime import UTC, datetime, timedelta, timezone
 import pytest
 from sqlalchemy import func, select
 
+from app.ai.contracts import UNKNOWN_CAUSE_MESSAGE
 from app.collectors.wikidata import WikidataLookup, WikidataMatch, WikidataRawResponse
 from app.models.enums import RunKind, RunStatus
 from app.models.tables import (
+    Claim,
     EntityResolutionAttempt,
     EntityResolutionAttemptRawFetch,
+    Evidence,
     PipelineRun,
     RawFetch,
     TrendEntity,
@@ -100,6 +103,13 @@ async def test_pipeline_persists_versions_entity_and_wikidata_raw_fetches(db_ses
     assert raw_link is not None
     assert raw_link.attempt_id == attempt.id
     assert raw_link.raw_fetch_id == attempt.raw_fetch_ids[0]
+    evidence = list(db_session.scalars(select(Evidence).order_by(Evidence.kind)))
+    assert {row.kind for row in evidence} == {"TREND_SIGNAL"}
+    claims = list(db_session.scalars(select(Claim).order_by(Claim.kind)))
+    assert {claim.kind for claim in claims} == {"CAUSE", "INTEREST"}
+    unknown_cause = next(claim for claim in claims if claim.kind == "CAUSE")
+    assert unknown_cause.text == UNKNOWN_CAUSE_MESSAGE
+    assert unknown_cause.publishable is True
 
 
 @pytest.mark.asyncio

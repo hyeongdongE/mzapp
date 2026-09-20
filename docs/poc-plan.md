@@ -212,7 +212,6 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
   Ruff passed. Fresh PostgreSQL persisted a `RISING / 60.0` snapshot with UTC/JSON fidelity.
 - Live PoC DB run 10 succeeded with zero snapshots because the only resolved entity is a structural,
   old Wikimedia baseline item; targeted official runs 7–9 remained conservatively `NEEDS_REVIEW`.
-- Independent Trend Detection + Scoring review: pending.
 - The initial independent review found one High cutoff leak through global candidate `first_seen_at`
   and five Medium counterexamples. Fixes now derive first-seen only from cutoff-eligible observations,
   require real observation buckets, assign zero strength to missing metrics, deduplicate repeated
@@ -228,3 +227,23 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
 - Final independent review found no Critical, High, or Medium issues and returned `Ready: Yes`.
   Its non-blocking Low test-gap note was closed with explicit low-score and over-tolerance sampling
   gap tail-break regressions.
+
+### Phase 5 — Evidence-grounded summaries and disabled providers (implementation complete 2026-09-21)
+
+- Added structured summary, claim, and evidence contracts plus a deterministic evidence-only
+  provider. Interest traffic cannot support an arbitrary cause; absent causal evidence uses the
+  fixed Korean unknown-cause statement.
+- Evidence checks fail closed for missing IDs, entity mismatch, future acquisition or source time,
+  non-official URLs, contradictions, and claim-kind mismatches. Results persist with support status,
+  publication flag, claim-evidence links, prompt version, and a canonical evidence-set cache key.
+- Only resolved entities in the exact-cutoff top-N snapshot query invoke the provider. Same-run
+  Wikidata data acquired after the cutoff is correctly excluded; previously acquired raw-fetch
+  provenance can support a WHAT claim.
+- External instruction text remains inert and no embedded URL is requested. The LLM provider raises
+  before transport use, while named Instagram/Threads providers return `DISABLED` without network.
+- Pipeline integration and the evidence-only CLI are complete. Native PostgreSQL execution returned
+  `snapshots=0 claims=0`; DB inspection confirmed zero claim/evidence rows because there were no
+  eligible snapshots. Controlled tests persisted supported INTEREST and unknown-cause claims and
+  separately verified pre-cutoff Wikidata provenance plus WHAT evidence matching.
+- Verification before independent review: 118 tests passed/9 opt-in integrations skipped; Ruff and
+  diff checks passed. Independent AI/Evidence review pending.
