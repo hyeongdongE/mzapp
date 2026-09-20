@@ -1,0 +1,22 @@
+{
+  "entities": {
+    "Q123": {
+      "labels": {
+        "ko": {"language": "ko", "value": "이현중"},
+        "en": {"language": "en", "value": "Lee Hyunjung"}
+      },
+      "aliases": {
+        "ko": [{"language": "ko", "value": "이현중 농구"}],
+        "en": [{"language": "en", "value": "Hyunjung Lee"}]
+      },
+      "descriptions": {
+        "ko": {"language": "ko", "value": "대한민국의 농구 선수"}
+      },
+      "claims": {
+        "P31": [
+          {"mainsnak": {"datavalue": {"value": {"id": "Q5"}}}}
+        ]
+      }
+    }
+  }
+}

@@ -152,3 +152,15 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
 - Final gate regression: 38 local tests passed with four opt-in PostgreSQL tests skipped; the three
   PostgreSQL concurrency/state-race cases and the legacy multi-payload migration case passed
   separately. `SUCCEEDED` is protected by an atomic conditional failure update.
+
+### Phase 3 — Candidate normalization and entity resolution (completed 2026-09-20)
+
+- Added deterministic NFKC/casefold/punctuation normalization, source-scoped candidate identity,
+  observation linking, and source-time first/last seen values.
+- Replay cutoff requires both `source_timestamp <= as_of` and acquisition `observed_at <= as_of`.
+- Added official read-only Wikidata search/get collection, exact raw response provenance, conservative
+  exact alias resolution, and `NEEDS_REVIEW` fallbacks for ambiguity, homonyms, absence, and outage.
+- Verification after implementation: complete suite 51 passed/4 opt-in PostgreSQL tests skipped;
+  focused Wikidata/candidate/entity/pipeline suite 13 passed.
+- Live Compose smoke at `2026-09-20T15:00:00Z` created 32 source-scoped candidates, retained two
+  official Wikidata raw fetches, resolved one entity, and marked pipeline run 1 `SUCCEEDED`.
