@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Candidates · Trend Radar{% endblock %}
+{% block content %}
+<h1>Candidate List</h1>
+<table>
+  <thead><tr><th>Trend name</th><th>Category</th><th>Lifecycle</th><th>내부 상대 점수</th><th>First seen</th><th>Sources</th><th>Evidence</th><th>Review status</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+    <tr>
+      <td><a href="/entities/{{ row.entity.id }}">{{ row.entity.canonical_name }}</a></td>
+      <td>{{ row.entity.category.value if row.entity.category else 'OTHER' }}</td>
+      <td>{{ row.snapshot.lifecycle.value if row.snapshot else '—' }}</td>
+      <td>{{ row.snapshot.total_score if row.snapshot else '—' }}</td>
+      <td>{{ row.first_seen if row.first_seen else '—' }}</td>
+      <td>{{ row.sources|join(', ') or '—' }}</td>
+      <td>{{ row.evidence_count }}</td>
+      <td>{{ row.entity.review_status.value }}</td>
+    </tr>
+  {% else %}<tr><td colspan="8">No candidates</td></tr>{% endfor %}
+  </tbody>
+</table>
+{% endblock %}

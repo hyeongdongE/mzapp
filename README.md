@@ -12,3 +12,4 @@ Current implementation notes:
 - `docs/classification.md`
 - `docs/trend-scoring.md`
 - `docs/evidence-summaries.md`
+- `docs/dashboard.md`

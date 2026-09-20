@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ entity.canonical_name }} · Trend Radar{% endblock %}
+{% block content %}
+<h1>{{ entity.canonical_name }}</h1>
+<p>Category: {{ entity.category.value if entity.category else 'OTHER' }} · Review: {{ entity.review_status.value }}</p>
+<h2>Entity</h2>
+<p>Wikidata match: {% if entity.wikidata_id %}<a href="https://www.wikidata.org/wiki/{{ entity.wikidata_id }}" rel="noreferrer">{{ entity.wikidata_id }}</a>{% else %}None{% endif %}</p>
+<p>Resolution: {{ entity.resolution_status.value }}</p>
+<h3>Aliases</h3>
+<ul>{% for alias in aliases %}<li>{{ alias.alias }} ({{ alias.language }}, {{ 'approved' if alias.approved else 'unapproved' }})</li>{% else %}<li>None</li>{% endfor %}</ul>
+<h2>Raw signals</h2>
+<table><thead><tr><th>Source</th><th>Query/page</th><th>Source time</th><th>Observed</th><th>Metrics</th></tr></thead><tbody>
+{% for item in observations %}<tr><td>{{ source_names[item.source] }}</td><td><a href="{{ item.source_url }}" rel="noreferrer">{{ item.canonical_text }}</a></td><td>{{ item.source_timestamp }}</td><td>{{ item.observed_at }}</td><td><code>{{ item.metrics }}</code></td></tr>{% else %}<tr><td colspan="5">None</td></tr>{% endfor %}
+</tbody></table>
+<h2>Trend history</h2>
+<p>점수는 확률이 아닌 내부 상대 점수입니다.</p>
+<table><thead><tr><th>As of</th><th>Lifecycle</th><th>Score</th><th>Breakdown</th></tr></thead><tbody>
+{% for item in snapshots %}<tr><td>{{ item.as_of }}</td><td>{{ item.lifecycle.value }}</td><td>{{ item.total_score }}</td><td><code>{{ item.breakdown }}</code></td></tr>{% endfor %}
+</tbody></table>
+<h2>AI summary</h2><ul>{% for claim in claims %}<li>{{ claim.text }} — {{ claim.status.value }}{% if not claim.publishable %} (blocked){% endif %}</li>{% else %}<li>None</li>{% endfor %}</ul>
+<h2>Evidence</h2><ul>{% for item in evidence %}<li>{{ source_names[item.source] }} · {{ item.observed_at }} · <a href="{{ item.source_url }}" rel="noreferrer">{{ item.source_url }}</a></li>{% else %}<li>None</li>{% endfor %}</ul>
+<h2>Review</h2>
+<form method="post" action="/reviews">
+  <input type="hidden" name="entity_id" value="{{ entity.id }}">
+  <input type="hidden" name="version" value="{{ entity.version }}">
+  <label>Actor <input name="actor" value="local-reviewer" required></label>
+  <label>Reason <input name="reason"></label>
+  <button name="action" value="APPROVE">Approve</button>
+  <button name="action" value="REJECT">Reject</button>
+  <button name="action" value="MARK_NOISE">Noise</button>
+</form>
+<form method="post" action="/reviews">
+  <input type="hidden" name="entity_id" value="{{ entity.id }}">
+  <input type="hidden" name="version" value="{{ entity.version }}">
+  <input type="hidden" name="actor" value="local-reviewer">
+  <label>Category <select name="category">{% for category in categories %}<option value="{{ category.value }}">{{ category.value }}</option>{% endfor %}</select></label>
+  <button name="action" value="CHANGE_CATEGORY">Change category</button>
+</form>
+<form method="post" action="/reviews">
+  <input type="hidden" name="entity_id" value="{{ entity.id }}">
+  <input type="hidden" name="version" value="{{ entity.version }}">
+  <input type="hidden" name="actor" value="local-reviewer">
+  <label>Target entity <select name="target_entity_id" required>{% for target in merge_targets %}<option value="{{ target.id }}">{{ target.canonical_name }} (#{{ target.id }})</option>{% endfor %}</select></label>
+  <button name="action" value="MERGE">Merge all into target</button>
+  <label>Candidate IDs for split <input name="candidate_ids" placeholder="1,2"></label>
+  <button name="action" value="SPLIT">Split selected into target</button>
+</form>
+<p>Linked candidate IDs: {% for candidate in linked_candidates %}{{ candidate.id }}{% if not loop.last %}, {% endif %}{% else %}None{% endfor %}</p>
+<form method="post" action="/evaluations">
+  <input type="hidden" name="entity_id" value="{{ entity.id }}">
+  <label>Actor <input name="actor" value="local-reviewer" required></label>
+  <label>Evaluation <select name="label"><option>VALID_TREND</option><option>TOO_OBVIOUS</option><option>NEWS_ONLY</option><option>DUPLICATE</option><option>WRONG_CATEGORY</option><option>BAD_ENTITY_MERGE</option><option>NOT_USEFUL</option><option>INSUFFICIENT_EVIDENCE</option></select></label>
+  <button type="submit">Record evaluation</button>
+</form>
+{% endblock %}

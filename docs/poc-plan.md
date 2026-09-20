@@ -265,3 +265,21 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
   cache/down-up test gap was then closed; concurrent nondeterministic-provider reservation remains a
   documented precondition before enabling any external provider and does not affect the deterministic,
   LLM-disabled PoC.
+
+### Phase 6 — Internal review dashboard (completed 2026-09-21)
+
+- Added a minimal server-rendered FastAPI/Jinja dashboard with Today, Candidate List, and Detail
+  screens. It exposes first seen, official source attribution, raw observations, aliases, Wikidata
+  match, lifecycle history, score breakdown, evidence-grounded claims, and evidence links.
+- Implemented `APPROVE`, `REJECT`, `MERGE`, `SPLIT`, `CHANGE_CATEGORY`, and `MARK_NOISE` as
+  audited transactional writes with row locks and optimistic entity-version checks. Merge transfers
+  candidate links and deduplicated aliases; split accepts only explicit source-owned candidate IDs.
+- Added internal human-evaluation entry for all eight PoC labels. Invalid and stale submissions fail
+  without an audit row or partial state change.
+- The default and Compose exposure remains host-loopback-only. Explicit public mode requires both an
+  allow flag and a non-empty API key supplied outside the repository; settings redact the key.
+- Focused dashboard/API/security verification passed 13 tests. A real PostgreSQL transaction verified
+  merge transfer, alias deduplication, audit, and target versioning, then rolled back cleanly.
+- The rebuilt Compose API returned 200 for health, Today, Candidate List, entity Detail, and CSS.
+  DB inspection at migration `0008` showed 33 candidates, one entity, zero reviews, and zero human
+  evaluations before and after rollback-only verification. LLM and Meta calls remain disabled.

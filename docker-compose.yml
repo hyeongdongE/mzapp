@@ -19,9 +19,9 @@ services:
     build: .
     environment:
       DATABASE_URL: postgresql+psycopg://trend_radar:trend_radar@db:5432/trend_radar
-      DASHBOARD_HOST: 0.0.0.0
-      DASHBOARD_ALLOW_PUBLIC: "true"
-      DASHBOARD_API_KEY: local-compose-only
+      # The published port below is host-loopback-only, so the dashboard stays in local mode.
+      DASHBOARD_HOST: 127.0.0.1
+      DASHBOARD_ALLOW_PUBLIC: "false"
     command:
       - sh
       - -c

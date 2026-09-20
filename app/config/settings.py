@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import HttpUrl, field_validator
+from pydantic import HttpUrl, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,9 +24,16 @@ class Settings(BaseSettings):
     user_agent: str = "TrendRadarPoC/0.1 (local-development; set-contact@example.com)"
     dashboard_host: str = "127.0.0.1"
     dashboard_allow_public: bool = False
-    dashboard_api_key: str | None = None
+    dashboard_api_key: SecretStr | None = None
     meta_provider_enabled: bool = False
     llm_provider_enabled: bool = False
+
+    @field_validator("dashboard_api_key", mode="before")
+    @classmethod
+    def empty_dashboard_api_key_is_disabled(cls, value: object) -> object | None:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @field_validator("google_trends_rss_url")
     @classmethod

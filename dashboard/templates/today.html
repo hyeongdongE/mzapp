@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Today · Trend Radar{% endblock %}
+{% block content %}
+<h1>Today</h1>
+<p>UTC date: {{ selected_day }}</p>
+<dl class="metrics">
+  <div><dt>Raw candidates</dt><dd id="raw-candidates">{{ counts.raw_candidates }}</dd></div>
+  <div><dt>Unique entities</dt><dd id="unique-entities">{{ counts.unique_entities }}</dd></div>
+  <div><dt>Published candidates</dt><dd id="published-candidates">{{ counts.published }}</dd></div>
+  <div><dt>Rejected candidates</dt><dd id="rejected-candidates">{{ counts.rejected }}</dd></div>
+</dl>
+{% endblock %}
