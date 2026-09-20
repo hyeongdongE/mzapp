@@ -11,7 +11,9 @@ from app.models.tables import (
     PipelineRun,
     RawFetch,
     TrendEntity,
+    TrendSnapshot,
 )
+from app.pipeline.candidate import CandidateGenerator
 from app.services.pipeline import PipelineService, observations_for_replay
 from tests.pipeline.test_candidate import AS_OF, add_observation
 
@@ -84,6 +86,9 @@ async def test_pipeline_persists_versions_entity_and_wikidata_raw_fetches(db_ses
     assert db_session.scalar(select(func.count()).select_from(PipelineRun)) == 1
     assert db_session.scalar(select(func.count()).select_from(TrendEntity)) == 1
     assert db_session.scalar(select(func.count()).select_from(RawFetch)) == 1
+    snapshot = db_session.scalar(select(TrendSnapshot))
+    assert snapshot is not None
+    assert snapshot.breakdown["interpretation"] == "internal_relative_score_not_probability"
     attempt = db_session.scalar(select(EntityResolutionAttempt))
     assert attempt is not None
     assert attempt.pipeline_run_id == run.id
@@ -147,3 +152,31 @@ async def test_live_pipeline_rejects_future_cutoff_before_creating_run(db_sessio
         ).build_entities(AS_OF)
 
     assert db_session.scalar(select(func.count()).select_from(PipelineRun)) == 0
+
+
+@pytest.mark.asyncio
+async def test_targeted_smoke_resolves_only_requested_candidate(db_session) -> None:
+    first_observation = add_observation(
+        db_session, item_id="target-first", text="first", source_timestamp=AS_OF
+    )
+    add_observation(
+        db_session, item_id="target-second", text="second", source_timestamp=AS_OF
+    )
+    target = CandidateGenerator(db_session).generate(first_observation)
+
+    class FakeWikidata:
+        collector_version = "wikidata-api-v1"
+
+        async def lookup(self, query: str) -> WikidataLookup:
+            return WikidataLookup(
+                matches=[WikidataMatch("Q_TARGET", query, (), None, ())],
+                raw_responses=[],
+            )
+
+    await PipelineService(
+        db_session, FakeWikidata(), now=lambda: AS_OF
+    ).build_entities(AS_OF, candidate_id=target.id)
+
+    attempts = list(db_session.scalars(select(EntityResolutionAttempt)))
+    assert len(attempts) == 1
+    assert attempts[0].candidate_id == target.id

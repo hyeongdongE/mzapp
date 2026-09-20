@@ -22,6 +22,7 @@ from app.models.tables import (
 )
 from app.pipeline.candidate import CandidateGenerator
 from app.pipeline.classification import EntityClassifier
+from app.pipeline.detection import TrendDetector
 from app.pipeline.entity import EntityResolver, validate_live_cutoff
 from app.services.collection import CollectionService
 
@@ -70,6 +71,7 @@ class PipelineService:
         *,
         kind: RunKind = RunKind.LIVE,
         max_candidates: int | None = None,
+        candidate_id: int | None = None,
     ) -> PipelineRun:
         if kind is RunKind.REPLAY:
             raise ValueError(
@@ -100,6 +102,12 @@ class PipelineService:
         resolver = EntityResolver(self._session, self._wikidata, now=lambda: started_at)
         try:
             candidates_to_resolve = list(candidates.values())
+            if candidate_id is not None:
+                candidates_to_resolve = [
+                    candidate
+                    for candidate in candidates_to_resolve
+                    if candidate.id == candidate_id
+                ]
             if max_candidates is not None:
                 candidates_to_resolve = candidates_to_resolve[:max_candidates]
             resolved_entity_ids: set[int] = set()
@@ -130,6 +138,9 @@ class PipelineService:
                 if result.entity_id is not None:
                     resolved_entity_ids.add(result.entity_id)
             classifier = EntityClassifier()
+            detector = TrendDetector(
+                self._session, now=self._now, score_version=versions.score
+            )
             entities = []
             if resolved_entity_ids:
                 entities = list(
@@ -146,6 +157,7 @@ class PipelineService:
                     pipeline_run_id=run.id,
                     classified_at=self._now().astimezone(UTC),
                 )
+                detector.snapshot(entity.id, as_of, pipeline_run_id=run.id)
         except Exception:
             run.status = RunStatus.FAILED
             run.completed_at = self._now().astimezone(UTC)

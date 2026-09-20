@@ -196,3 +196,20 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
   rejected before request/run creation. Temporary verification databases were removed.
 - Final independent Phase 3 review (`1bdeba9..f27fb6d`) reported no Critical, High, Medium, or Low
   findings and returned `Ready: Yes`.
+
+### Phase 4 — Trend detection and explainable scoring (implementation complete 2026-09-21)
+
+- Added source-lag-aware signal windows (Google 24h, Wikimedia 72h), 28-day historical baseline,
+  structural page suppression, normalized strength, alias repetition, cross-source, and news-only
+  features. Both source and acquisition timestamps must be at or before cutoff.
+- Implemented the exact versioned `score-v1` formula with 0–1 components, signed contributions,
+  missing-input tracking, 0–100 clamp, and an explicit not-a-probability interpretation marker.
+- Implemented lifecycle precedence `COOLING -> HOT -> RISING -> NEW`; a single news spike cannot be
+  `HOT`, and an old weak entity without prior state is not mislabeled `NEW`.
+- Integrated scoring into the entity pipeline and added a score-only CLI plus targeted candidate
+  smoke option. Unresolved/ambiguous entities never receive snapshots.
+- Verification before independent review: 94 local tests passed/8 opt-in integrations skipped and
+  Ruff passed. Fresh PostgreSQL persisted a `RISING / 60.0` snapshot with UTC/JSON fidelity.
+- Live PoC DB run 10 succeeded with zero snapshots because the only resolved entity is a structural,
+  old Wikimedia baseline item; targeted official runs 7–9 remained conservatively `NEEDS_REVIEW`.
+- Independent Trend Detection + Scoring review: pending.
