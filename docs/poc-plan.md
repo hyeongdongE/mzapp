@@ -283,3 +283,23 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
 - The rebuilt Compose API returned 200 for health, Today, Candidate List, entity Detail, and CSS.
   DB inspection at migration `0008` showed 33 candidates, one entity, zero reviews, and zero human
   evaluations before and after rollback-only verification. LLM and Meta calls remain disabled.
+
+### Phase 7 — Evaluation metrics and reports (completed 2026-09-21)
+
+- Implemented explicit daily supply, all-category coverage, human-reviewed quality, unsupported
+  summary, cross-source confirmation, freshness percentile, and USD cost formulas. Empty
+  denominators remain `N/A`; negative latency and mixed/non-USD costs fail instead of being hidden.
+- Category selection uses classification and audited category changes before the period cutoff.
+  Detection freshness uses the original detection only, while approval latency can be recorded on a
+  later day without inventing another detection event.
+- Weekly reports aggregate seven daily fact objects, recompute rates and percentiles from daily
+  numerators/samples, union version sets, and count a complete day only when both Google Trends and
+  Wikimedia have successful collection runs.
+- Added deterministic daily/weekly Markdown renderers, an atomic sibling-temp-file writer, and the
+  `scripts/evaluate.py` CLI. `READY_FOR_USER_MVP` is never selected before 14 complete days; the
+  current evidence-based decision is `CONTINUE_DATA_COLLECTION`.
+- Focused evaluation/report/CLI verification passed 14 tests. A native PostgreSQL run generated
+  `reports/2026-09-20.md` and `reports/week-01.md`. The day contained 68 acquired official source
+  observations and seven unique candidates, but zero trend entities or approved cards; unavailable
+  quality, cross-source, freshness, and cost-per-card denominators rendered as `N/A`. Week 01
+  correctly counted one complete official-collection day rather than seven empty calendar days.

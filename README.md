@@ -13,3 +13,4 @@ Current implementation notes:
 - `docs/trend-scoring.md`
 - `docs/evidence-summaries.md`
 - `docs/dashboard.md`
+- `docs/evaluation.md`
