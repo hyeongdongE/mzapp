@@ -96,18 +96,20 @@ class CollectionService:
 
         fetch = self._repo.find_fetch(run.id)
         if fetch is None:
-            fetch = RawFetch(
-                run_id=run.id,
-                raw_payload_id=payload.id,
-                request_url=batch.request_url,
-                collected_at=batch.collected_at,
-                source_timestamp=source_timestamp,
-                collector_version=batch.collector_version,
-                parser_version=batch.parser_version,
+            fetch = self._repo.create_with_conflict_recovery(
+                lambda: RawFetch(
+                    run_id=run.id,
+                    raw_payload_id=payload.id,
+                    request_url=batch.request_url,
+                    collected_at=batch.collected_at,
+                    source_timestamp=source_timestamp,
+                    collector_version=batch.collector_version,
+                    parser_version=batch.parser_version,
+                ),
+                lambda: self._repo.find_fetch(run.id),
             )
-            self._session.add(fetch)
-            self._session.flush()
-        elif fetch.raw_payload_id != payload.id:
+            assert isinstance(fetch, RawFetch)
+        if fetch.raw_payload_id != payload.id:
             raise ValueError("collection run key cannot be reused for a different payload")
 
         existing = self._repo.existing_source_item_ids(run.id)
@@ -159,6 +161,8 @@ class CollectionService:
             assert isinstance(run, CollectionRun)
         elif run.source != source:
             raise ValueError("collection run key cannot be reused across sources")
+        if run.status == RunStatus.SUCCEEDED:
+            return
         run.status = RunStatus.FAILED
         run.completed_at = completed_at
         run.error_code = error_code

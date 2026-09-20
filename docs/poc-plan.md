@@ -145,3 +145,9 @@ NAVER Search/DataLab, TikTok, Reddit, X, YouTube 결합 점수, Instagram/Thread
   Wikimedia source timestamp remained the explicitly requested `2026-09-18` date.
 - An induced official-host timeout exited nonzero and persisted a `FAILED` run with only the redacted
   `TIMEOUT` code, confirming failure audit durability.
+- Reviewer follow-up found no remaining Critical/High issues. Its two remaining Medium counterexamples
+  were also fixed: concurrent resume of one failed run now recovers the per-run fetch conflict and a
+  failed retry cannot downgrade a successful run; legacy multi-payload backfill selects the payload
+  linked to the latest observation while leaving all raw blobs and observations intact.
+- Final gate regression: 38 local tests passed with three opt-in PostgreSQL tests skipped; the two
+  PostgreSQL concurrency cases and the legacy multi-payload migration case passed separately.

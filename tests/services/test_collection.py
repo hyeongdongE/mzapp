@@ -206,3 +206,26 @@ async def test_failed_collection_survives_outer_rollback_in_its_own_transaction(
     finally:
         Base.metadata.drop_all(engine)
         engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_failed_retry_does_not_downgrade_a_succeeded_run(db_session) -> None:
+    class FailingCollector:
+        source = Source.GOOGLE_TRENDS
+
+        async def collect(self, _as_of: datetime) -> CollectionBatch:
+            raise HttpRequestFailed("TIMEOUT")
+
+    service = CollectionService(db_session)
+    service.persist(batch(), run_key="google:already-succeeded")
+    db_session.commit()
+
+    with pytest.raises(HttpRequestFailed):
+        await service.run(FailingCollector(), as_of=AS_OF, run_key="google:already-succeeded")
+
+    run = db_session.scalar(
+        select(CollectionRun).where(CollectionRun.run_key == "google:already-succeeded")
+    )
+    assert run is not None
+    assert run.status is RunStatus.SUCCEEDED
+    assert run.error_code is None

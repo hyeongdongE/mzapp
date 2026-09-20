@@ -36,6 +36,26 @@ def upgrade() -> None:
     op.execute(
         sa.text(
             """
+            WITH ranked_fetches AS (
+                SELECT
+                    observation.run_id,
+                    observation.raw_payload_id,
+                    CASE
+                        WHEN observation.source = 'GOOGLE_TRENDS'
+                        THEN 'https://trends.google.com/trending/rss?geo=KR'
+                        ELSE observation.source_url
+                    END AS request_url,
+                    payload.collected_at,
+                    payload.source_timestamp,
+                    payload.collector_version,
+                    payload.parser_version,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY observation.run_id
+                        ORDER BY observation.observed_at DESC, observation.id DESC
+                    ) AS fetch_rank
+                FROM source_observations AS observation
+                JOIN raw_payloads AS payload ON payload.id = observation.raw_payload_id
+            )
             INSERT INTO raw_fetches (
                 run_id,
                 raw_payload_id,
@@ -45,20 +65,16 @@ def upgrade() -> None:
                 collector_version,
                 parser_version
             )
-            SELECT DISTINCT
-                observation.run_id,
-                observation.raw_payload_id,
-                CASE
-                    WHEN observation.source = 'GOOGLE_TRENDS'
-                    THEN 'https://trends.google.com/trending/rss?geo=KR'
-                    ELSE observation.source_url
-                END,
-                payload.collected_at,
-                payload.source_timestamp,
-                payload.collector_version,
-                payload.parser_version
-            FROM source_observations AS observation
-            JOIN raw_payloads AS payload ON payload.id = observation.raw_payload_id
+            SELECT
+                run_id,
+                raw_payload_id,
+                request_url,
+                collected_at,
+                source_timestamp,
+                collector_version,
+                parser_version
+            FROM ranked_fetches
+            WHERE fetch_rank = 1
             """
         )
     )
