@@ -1,0 +1,10 @@
+{
+  "name": "Personal Trend Radar",
+  "short_name": "Trend Radar",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f1e8",
+  "theme_color": "#f4f1e8",
+  "lang": "ko",
+  "icons": []
+}
