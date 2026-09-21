@@ -84,12 +84,47 @@ test('feed shows lifecycle hierarchy and records useful feedback', async () => {
   await waitFor(() => expect(screen.getByRole('button', { name: '처음 봤어요 ✨' })).toHaveAttribute('aria-pressed', 'true'))
 })
 
+test('saving a feed card confirms the action without leaving the feed', async () => {
+  installApi()
+  window.history.pushState({}, '', '/feed')
+  render(<App />)
+
+  await screen.findByText('피스타치오 디저트')
+  await userEvent.click(screen.getByRole('button', { name: '저장' }))
+
+  expect(await screen.findByRole('status')).toHaveTextContent('저장했어요')
+  expect(screen.getByRole('button', { name: '저장 취소' })).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('Explore reuses eligible feed cards without presenting a fake search', async () => {
+  installApi()
+  window.history.pushState({}, '', '/explore')
+  render(<App />)
+
+  expect(await screen.findByRole('heading', { name: '요즘 뜨는 분야' })).toBeInTheDocument()
+  expect(await screen.findByText('피스타치오 디저트')).toBeInTheDocument()
+  expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
+})
+
 test('feed preserves an honest empty state', async () => {
   installApi([])
   window.history.pushState({}, '', '/feed')
   render(<App />)
 
   expect(await screen.findByText('아직 새로운 흐름이 없어요')).toBeInTheDocument()
+})
+
+test('route transitions reset the document scroll position', async () => {
+  installApi()
+  window.history.pushState({}, '', '/feed')
+  render(<App />)
+
+  const trend = await screen.findByRole('link', { name: /피스타치오 디저트/ })
+  document.documentElement.scrollTop = 420
+  await userEvent.click(trend)
+
+  await waitFor(() => expect(window.location.pathname).toBe('/trends/trend-1'))
+  expect(document.documentElement.scrollTop).toBe(0)
 })
 
 test('detail presents supported explanation, unknown cause, and attribution', async () => {
@@ -99,7 +134,10 @@ test('detail presents supported explanation, unknown cause, and attribution', as
 
   expect(await screen.findByText('피스타치오를 활용한 디저트입니다.')).toBeInTheDocument()
   expect(screen.getByText(/증가 원인은 확인되지 않았습니다/)).toBeInTheDocument()
-  expect(screen.getByRole('link', { name: /WIKIMEDIA/ })).toHaveAttribute('href', 'https://wikimedia.org/example')
+  expect(screen.getByRole('link', { name: /Wikimedia에서 확인/ })).toHaveAttribute('href', 'https://wikimedia.org/example')
+  const save = screen.getByRole('button', { name: '저장' })
+  await userEvent.click(save)
+  await waitFor(() => expect(screen.getByRole('button', { name: '저장 취소' })).toHaveAttribute('aria-pressed', 'true'))
   expect(screen.getByRole('button', { name: '내용이 부정확해요' })).toBeInTheDocument()
 })
 
@@ -115,4 +153,5 @@ test('saved and settings routes render persisted user state', async () => {
   const food = await screen.findByRole('checkbox', { name: '음식' })
   await waitFor(() => expect(food).toBeChecked())
   expect(screen.getByRole('radio', { name: '알림 끔' })).toBeChecked()
+  expect(screen.getByText(/실제 알림은 아직 보내지 않아요/)).toBeInTheDocument()
 })

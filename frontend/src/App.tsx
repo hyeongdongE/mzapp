@@ -51,6 +51,15 @@ function BottomNav() {
   )
 }
 
+function RouteReset() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    document.documentElement.scrollTop = 0
+    document.body.scrollTop = 0
+  }, [pathname])
+  return null
+}
+
 function Shell() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -79,6 +88,7 @@ function Shell() {
 
   return (
     <AppContext.Provider value={state}>
+      <RouteReset />
       {catalog.dataMode === 'DEMO' && <div className="demo-banner">DEMO DATA · 실제 트렌드가 아닙니다</div>}
       <Routes>
         <Route path="/" element={<RootRedirect />} />

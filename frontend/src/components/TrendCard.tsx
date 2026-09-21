@@ -74,7 +74,7 @@ export default function TrendCard({ item, compact = false }: { item: TrendItem; 
         <time dateTime={item.observedAt}>{freshness(item.observedAt)}</time>
       </div>
       {!compact && <FeedbackBar trendId={item.trendId} initial={item.feedback} />}
-      <span className="sr-only" aria-live="polite">{notice}</span>
+      {notice && <span className="toast" role="status">{notice}</span>}
     </article>
   )
 }
