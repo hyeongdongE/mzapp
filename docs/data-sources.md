@@ -48,6 +48,23 @@
 - Replay never calls live Wikidata. It uses the selected entity recorded by successful historical
   live resolution attempts.
 
+## GeekNews Atom feed
+
+- Official endpoint: `https://news.hada.io/rss/news`
+- Role: candidate discovery for Korean developer/technology topics; appearance in the feed is not a
+  popularity measurement and never implies `AI_TECH`, `RISING`, or `HOT`.
+- Stored parsed fields: entry ID, title, official GeekNews topic link, publication timestamp, and
+  observation timestamp. Author and long HTML content are not mapped into observations.
+- Provenance: the exact Atom bytes, SHA-256, request URL, acquisition/source timestamps, collector
+  version, and parser version use the existing raw payload/fetch model.
+- Deduplication: an entry ID is observed once per parser version. A parser upgrade may create one
+  corrected observation while repeated polls on that version retain only the new raw fetch.
+- Access guidance: one sequential request per hour, bounded timeout/retry, no page or comment
+  scraping, and no login/private endpoint.
+- Limitation: headlines are article-shaped text, so exact Wikidata resolution can legitimately
+  produce zero entities. Such items remain `NEEDS_REVIEW`; no title splitting or forced category is
+  performed in this minimal integration.
+
 ## Explicitly disabled sources
 
 NAVER APIs, pytrends, TikTok, Reddit, X, YouTube-combined scoring, Instagram/Threads scraping,
@@ -61,8 +78,9 @@ rate limits are confirmed.
 - `raw_fetches` records one successful fetch occurrence per collection run, including request URL,
   acquisition timestamp, source timestamp, and collector/parser versions. Empty successful payloads
   therefore remain replayable even when they create no observations.
-- `source_observations` records item occurrences per run. Feed-provided news URLs remain untrusted
-  metadata and are never fetched.
+- `source_observations` records item occurrences per run. GeekNews additionally suppresses a repeated
+  entry ID within the same parser version; raw fetch provenance is still retained. Feed-provided
+  external metadata is never fetched.
 - Typed collection failures are committed in an independent transaction with a redacted error code.
 - A successful run is a monotonic terminal state: an atomic conditional update prevents even a stale
   failed transaction from overwriting its status or error fields. Concurrent retries recover run,

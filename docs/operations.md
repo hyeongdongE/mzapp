@@ -43,8 +43,8 @@ users/interactions/events. It never changes LIVE pipeline or evaluation rows.
 date-only `--to` maps to UTC day end. Datetimes must include a timezone and are normalized to UTC.
 
 Replay never calls Wikidata or any other external source. It verifies and decodes immutable
-`raw_payloads`, selects the parser recorded by each `raw_fetch`, parses the official Google/Wikimedia
-bytes again, and normalizes the parsed item text. Candidate-to-entity links come from the latest
+`raw_payloads`, selects the parser recorded by each `raw_fetch`, parses Google Trends, Wikimedia,
+and official GeekNews feed bytes again, and normalizes the parsed item text. Candidate-to-entity links come from the latest
 successful **LIVE** `EntityResolutionAttempt` known at each cutoff, never the mutable current link.
 Future payloads and future resolution decisions therefore cannot alter a historical digest.
 Raw input starts 32 days before `--from` to warm the scorer baseline, while derived snapshots still
@@ -70,8 +70,9 @@ of silently attaching another run to that row. Review and human-evaluation recor
 
 The replay advances in six-hour cutoffs and uses only snapshots created earlier in that same replay
 run for lifecycle state. This makes HOT/COOLING history independent of pre-existing database
-snapshots and run order. Normalizer/entity/classifier/prompt replay versions are currently restricted
-to the implemented `*-v1` values; unsupported labels fail instead of misrepresenting the code used.
+snapshots and run order. Normalizer/entity/prompt replay versions are restricted to implemented
+`*-v1` values and the classifier to `classifier-v2`; unsupported labels fail instead of
+misrepresenting the code used.
 A new scoring algorithm must use a new `score_version`.
 
 ## Scheduler
@@ -83,11 +84,12 @@ The single-process APScheduler uses stable IDs, `replace_existing`, `coalesce=Tr
 |---|---|
 | Google Trends collection | Every hour |
 | Wikimedia collection | Daily 09:05, targeting the date two days earlier |
+| GeekNews collection | Hourly at minute 05 |
 | Entity/classification/scoring/summary pipeline | Hourly at minute 10 |
 | Daily evaluation | Daily 09:30 for the previous UTC day, plus D-2 refresh after delayed Wikimedia |
 | Weekly evaluation | Monday 10:00 |
 
-Each source is a separate job, so a Google failure does not suppress Wikimedia or reporting.
+Each source is a separate job, so one source failure does not suppress other collectors or reporting.
 APScheduler records exceptions in logs and continues later jobs. SIGINT/SIGTERM performs a waiting
 shutdown so an active database transaction can finish.
 
