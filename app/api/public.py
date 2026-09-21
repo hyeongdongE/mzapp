@@ -9,7 +9,8 @@ from app.api.public_dependencies import (
     enforce_same_origin,
 )
 from app.models.enums import Category, NotificationMode
-from app.product.schemas import InterestsInput, SettingsInput
+from app.product.feed import FeedService
+from app.product.schemas import FeedbackInput, InterestsInput, SettingsInput
 from app.product.users import UserService
 
 router = APIRouter(
@@ -115,3 +116,72 @@ def put_user_settings(
         "notificationMode": mode.value,
         "pushDeliveryEnabled": False,
     }
+
+
+def _feed_service(request: Request, session: SessionDependency) -> FeedService:
+    return FeedService(session, request.app.state.settings.publication_policy_mode)
+
+
+@router.get("/feed")
+def feed(request: Request, user: CurrentUser, session: SessionDependency) -> dict:
+    return {
+        "dataMode": "LIVE",
+        "items": _feed_service(request, session).ranked_items(user.id),
+    }
+
+
+@router.get("/trends/{public_id}")
+def trend_detail(
+    public_id: str, request: Request, user: CurrentUser, session: SessionDependency
+) -> dict:
+    service = _feed_service(request, session)
+    card = service.get_eligible(user.id, public_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail="trend not found")
+    service.record_open(user.id, card.id)
+    return service.detail(user.id, card)
+
+
+@router.put("/trends/{public_id}/feedback")
+def put_feedback(
+    public_id: str,
+    payload: FeedbackInput,
+    request: Request,
+    user: CurrentUser,
+    session: SessionDependency,
+) -> dict:
+    service = _feed_service(request, session)
+    card = service.get_eligible(user.id, public_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail="trend not found")
+    feedback = service.feedback(user.id, card.id, payload.feedback_type)
+    return {"feedback": feedback.feedback_type.value}
+
+
+@router.put("/trends/{public_id}/save")
+def save_trend(
+    public_id: str, request: Request, user: CurrentUser, session: SessionDependency
+) -> dict:
+    service = _feed_service(request, session)
+    card = service.get_eligible(user.id, public_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail="trend not found")
+    service.save(user.id, card.id)
+    return {"saved": True}
+
+
+@router.delete("/trends/{public_id}/save", status_code=status.HTTP_204_NO_CONTENT)
+def unsave_trend(
+    public_id: str, request: Request, user: CurrentUser, session: SessionDependency
+) -> Response:
+    service = _feed_service(request, session)
+    card = service.get_eligible(user.id, public_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail="trend not found")
+    service.unsave(user.id, card.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/saved")
+def saved(request: Request, user: CurrentUser, session: SessionDependency) -> dict:
+    return {"dataMode": "LIVE", "items": _feed_service(request, session).saved_items(user.id)}
