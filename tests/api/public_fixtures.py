@@ -90,20 +90,28 @@ def seed_live_card(
     )
     session.add(snapshot)
     session.flush()
-    claim = Claim(
-        entity_id=entity.id,
-        kind="WHAT",
-        text="근거 있는 설명",
-        status=EvidenceStatus.SUPPORTED,
-        reason="SUPPORTED",
-        publishable=publishable,
-        prompt_version="p1",
-        evidence_set_hash=uuid4().hex * 2,
-        created_at=NOW,
-    )
-    session.add(claim)
+    claims = [
+        Claim(
+            entity_id=entity.id,
+            kind=kind,
+            text=text,
+            status=EvidenceStatus.SUPPORTED,
+            reason="SUPPORTED",
+            publishable=publishable,
+            prompt_version="p1",
+            evidence_set_hash=uuid4().hex * 2,
+            created_at=NOW,
+        )
+        for kind, text in (
+            ("WHAT", "근거 있는 설명"),
+            ("INTEREST", "관심 증가가 관측되었습니다."),
+        )
+    ]
+    session.add_all(claims)
     session.flush()
-    session.add(ClaimSnapshot(claim_id=claim.id, snapshot_id=snapshot.id))
+    session.add_all(
+        ClaimSnapshot(claim_id=claim.id, snapshot_id=snapshot.id) for claim in claims
+    )
     card = ProductTrendCard(
         public_id=str(uuid4()),
         data_mode=DataMode.LIVE,

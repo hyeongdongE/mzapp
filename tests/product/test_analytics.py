@@ -149,6 +149,9 @@ def test_category_performance_contains_auto_publish_decision_inputs(api_session)
             ClaimSnapshot(claim_id=unsupported.id, snapshot_id=card.snapshot_id),
             Review(
                 entity_id=card.entity_id,
+                product_card_id=card.id,
+                snapshot_id=card.snapshot_id,
+                category_at_review=card.category,
                 action=ReviewAction.APPROVE,
                 actor="reviewer",
                 reason="supported",
@@ -164,13 +167,17 @@ def test_category_performance_contains_auto_publish_decision_inputs(api_session)
 
     row = next(
         item
-        for item in ProductAnalytics(api_session).category_performance()
+        for item in ProductAnalytics(api_session).category_performance(now=NOW)
         if item["category"] == "AI_TECH"
     )
 
-    assert row["valid_trends_per_day"] == 1.0
+    assert row["window_days"] == 14
+    assert row["valid_trends_per_day"] == 0.07
     assert row["false_positive_rate"] == 0.0
-    assert row["unsupported_claim_rate"] == 0.5
+    assert row["unsupported_claim_rate"] == 0.3333
+    assert row["auto_publishable_cards"] == 1
+    assert row["shadow_auto_eligible_cards"] == 1
+    assert row["human_reviewed_cards"] == 1
     assert row["review_rejection_rate"] == 0.0
     assert row["human_approval_rate"] == 1.0
 
@@ -194,8 +201,56 @@ def test_category_claim_rate_ignores_claims_not_linked_to_live_cards(api_session
 
     row = next(
         item
-        for item in ProductAnalytics(api_session).category_performance()
+        for item in ProductAnalytics(api_session).category_performance(now=NOW)
         if item["category"] == "AI_TECH"
     )
 
     assert row["unsupported_claim_rate"] == 0.0
+
+
+def test_category_review_metrics_use_latest_decision_per_card(api_session) -> None:
+    card = seed_live_card(api_session)
+    api_session.add_all(
+        [
+            Review(
+                entity_id=card.entity_id,
+                product_card_id=card.id,
+                snapshot_id=card.snapshot_id,
+                category_at_review=card.category,
+                action=ReviewAction.REJECT,
+                actor="reviewer",
+                reason="initial rejection",
+                payload={},
+                previous_status=ReviewStatus.PENDING,
+                resulting_status=ReviewStatus.REJECTED,
+                auto_pipeline_result=True,
+                created_at=NOW - timedelta(minutes=1),
+            ),
+            Review(
+                entity_id=card.entity_id,
+                product_card_id=card.id,
+                snapshot_id=card.snapshot_id,
+                category_at_review=card.category,
+                action=ReviewAction.APPROVE,
+                actor="reviewer",
+                reason="evidence corrected",
+                payload={},
+                previous_status=ReviewStatus.REJECTED,
+                resulting_status=ReviewStatus.APPROVED,
+                auto_pipeline_result=True,
+                created_at=NOW,
+            ),
+        ]
+    )
+    api_session.commit()
+
+    row = next(
+        item
+        for item in ProductAnalytics(api_session).category_performance(now=NOW)
+        if item["category"] == "AI_TECH"
+    )
+
+    assert row["human_reviewed_cards"] == 1
+    assert row["auto_publishable_reviewed"] == 1
+    assert row["human_approval_rate"] == 1.0
+    assert row["review_rejection_rate"] == 0.0

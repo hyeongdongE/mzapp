@@ -19,7 +19,7 @@ beforeEach(() => {
   window.history.pushState({}, '', '/onboarding')
   fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input)
-    if (path.endsWith('/session')) return jsonResponse({ anonymousId: 'user-1', isNew: true }, 201)
+    if (path.endsWith('/session')) return jsonResponse({ isNew: true }, 201)
     if (path.endsWith('/categories')) return jsonResponse({
       dataMode: 'DEMO',
       items: [

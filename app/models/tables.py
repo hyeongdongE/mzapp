@@ -389,6 +389,11 @@ class Review(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     entity_id: Mapped[int] = mapped_column(ForeignKey("trend_entities.id"), nullable=False)
+    product_card_id: Mapped[int | None] = mapped_column(
+        ForeignKey("product_trend_cards.id")
+    )
+    snapshot_id: Mapped[int | None] = mapped_column(ForeignKey("trend_snapshots.id"))
+    category_at_review: Mapped[Category | None] = mapped_column(enum_column(Category))
     action: Mapped[ReviewAction] = mapped_column(enum_column(ReviewAction), nullable=False)
     actor: Mapped[str] = mapped_column(String(160), nullable=False)
     reason: Mapped[str | None] = mapped_column(Text)

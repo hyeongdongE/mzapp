@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.ai.contracts import UNKNOWN_CAUSE_MESSAGE
@@ -17,6 +17,7 @@ from app.models.tables import (
     TrendEntity,
     TrendFeedback,
     TrendInteraction,
+    TrendSnapshot,
     UserInterest,
 )
 from app.product.policy import PublicationContext, PublicationPolicyEvaluator
@@ -59,24 +60,36 @@ class FeedService:
         if self._data_mode is not DataMode.LIVE:
             return []
         rows = self._session.execute(
-            select(ProductTrendCard, TrendEntity, PipelineRun, CategorySetting)
+            select(
+                ProductTrendCard,
+                TrendEntity,
+                TrendSnapshot,
+                PipelineRun,
+                CategorySetting,
+            )
             .join(TrendEntity, TrendEntity.id == ProductTrendCard.entity_id)
+            .join(TrendSnapshot, TrendSnapshot.id == ProductTrendCard.snapshot_id)
             .join(PipelineRun, PipelineRun.id == ProductTrendCard.pipeline_run_id)
-            .join(CategorySetting, CategorySetting.category == ProductTrendCard.category)
+            .join(CategorySetting, CategorySetting.category == TrendEntity.category)
             .where(
                 ProductTrendCard.data_mode == DataMode.LIVE,
-                ProductTrendCard.category.in_(interests),
+                TrendEntity.category.in_(interests),
+                ProductTrendCard.category == TrendEntity.category,
+                TrendSnapshot.entity_id == ProductTrendCard.entity_id,
+                TrendSnapshot.pipeline_run_id == ProductTrendCard.pipeline_run_id,
             )
         ).all()
         eligible = []
-        for card, entity, run, category in rows:
-            publishable_count = self._session.scalar(
-                select(func.count())
-                .select_from(Claim)
-                .join(ClaimSnapshot, ClaimSnapshot.claim_id == Claim.id)
-                .where(
-                    ClaimSnapshot.snapshot_id == card.snapshot_id,
-                    Claim.publishable.is_(True),
+        for card, entity, _snapshot, run, category in rows:
+            publishable_kinds = set(
+                self._session.scalars(
+                    select(Claim.kind)
+                    .join(ClaimSnapshot, ClaimSnapshot.claim_id == Claim.id)
+                    .where(
+                        ClaimSnapshot.snapshot_id == card.snapshot_id,
+                        Claim.entity_id == card.entity_id,
+                        Claim.publishable.is_(True),
+                    )
                 )
             )
             decision = self._policy.evaluate(
@@ -84,7 +97,7 @@ class FeedService:
                     data_mode=card.data_mode,
                     run_kind=run.kind,
                     run_status=run.status,
-                    has_publishable_claims=bool(publishable_count),
+                    has_publishable_claims={"WHAT", "INTEREST"} <= publishable_kinds,
                     category_status=category.status,
                     review_status=entity.review_status,
                     suppressed=card.suppressed,

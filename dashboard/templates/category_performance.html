@@ -2,9 +2,9 @@
 {% block title %}Category performance · Trend Radar{% endblock %}
 {% block content %}
 <h1>LIVE category performance</h1>
-<p>Use these inputs to change category availability; no status is activated automatically.</p>
+<p>Rolling 14-day LIVE window. Use these inputs to change category availability; no status is activated automatically.</p>
 <table>
-  <thead><tr><th>Category</th><th>Valid/day</th><th>Usable rate</th><th>Noise</th><th>False positive</th><th>Unsupported claims</th><th>Discovery</th><th>Already known</th><th>Incorrect</th><th>Auto reviewed</th><th>Human approval</th><th>Review rejection</th></tr></thead>
+  <thead><tr><th>Category</th><th>Valid/day</th><th>Usable rate</th><th>Noise</th><th>False positive</th><th>Unsupported claims</th><th>Discovery</th><th>Already known</th><th>Incorrect</th><th>Pipeline publishable</th><th>Shadow eligible</th><th>Human reviewed</th><th>Auto reviewed</th><th>Human approval</th><th>Review rejection</th></tr></thead>
   <tbody>
   {% for row in rows %}
     <tr>
@@ -17,6 +17,9 @@
       <td>{{ row.discovery_value_rate if row.discovery_value_rate is not none else "Unavailable" }}</td>
       <td>{{ row.already_known_rate if row.already_known_rate is not none else "Unavailable" }}</td>
       <td>{{ row.incorrect_feedback_rate if row.incorrect_feedback_rate is not none else "Unavailable" }}</td>
+      <td>{{ row.auto_publishable_cards }}</td>
+      <td>{{ row.shadow_auto_eligible_cards }}</td>
+      <td>{{ row.human_reviewed_cards }}</td>
       <td>{{ row.auto_publishable_reviewed }}</td>
       <td>{{ row.human_approval_rate if row.human_approval_rate is not none else "Unavailable" }}</td>
       <td>{{ row.review_rejection_rate if row.review_rejection_rate is not none else "Unavailable" }}</td>

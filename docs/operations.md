@@ -20,6 +20,11 @@ automatic eligibility but preserves manual publication. `AUTO_PUBLISH` removes t
 do not enable it until false positives, unsupported claims, review rejection, usable-card rate, and
 incorrect-user-feedback are stable.
 
+The scheduled LIVE pipeline projects cards after the pipeline run is marked successful in the same
+transaction. Public eligibility rechecks that the card, entity, snapshot, and run agree and that
+both publishable `WHAT` and `INTEREST` claims are linked to that exact snapshot. A projection error
+marks the run failed; it cannot leave a card from a failed or replay run publicly eligible.
+
 Demo fixtures are opt-in and bounded:
 
 ```powershell

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.enums import (
     CandidateStatus,
+    Category,
     HumanEvaluationLabel,
     ResolutionStatus,
     ReviewAction,
@@ -18,6 +19,7 @@ from app.models.tables import (
     EntityAlias,
     EntityCandidate,
     HumanEvaluation,
+    ProductTrendCard,
     Review,
     TrendCandidate,
     TrendEntity,
@@ -116,6 +118,9 @@ def test_review_records_automatic_pipeline_result_for_future_agreement_metrics(
     assert response.status_code == 303
     review = api_session.scalar(select(Review).where(Review.entity_id == entity.id))
     assert review.auto_pipeline_result is True
+    assert review.product_card_id == card.id
+    assert review.snapshot_id == card.snapshot_id
+    assert review.category_at_review is Category.AI_TECH
     assert review.resulting_status is ReviewStatus.APPROVED
     assert review.human_override_reason is None
 
@@ -143,6 +148,32 @@ def test_review_records_reason_only_when_human_overrides_pipeline(
     assert review.auto_pipeline_result is True
     assert review.resulting_status is ReviewStatus.REJECTED
     assert review.human_override_reason == "unsupported context"
+
+
+def test_category_change_updates_live_projection_and_audit_category(
+    client: TestClient, api_session: Session
+) -> None:
+    card = seed_live_card(api_session, review_status=ReviewStatus.PENDING)
+    entity = api_session.get(TrendEntity, card.entity_id)
+
+    response = client.post(
+        "/internal/reviews",
+        data={
+            "entity_id": entity.id,
+            "action": "CHANGE_CATEGORY",
+            "category": "FOOD",
+            "version": entity.version,
+            "actor": "local-reviewer",
+            "reason": "classification corrected",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    api_session.expire_all()
+    review = api_session.scalar(select(Review).where(Review.entity_id == entity.id))
+    assert api_session.get(ProductTrendCard, card.id).category is Category.FOOD
+    assert review.category_at_review is Category.FOOD
 
 
 def test_invalid_change_category_is_atomic(

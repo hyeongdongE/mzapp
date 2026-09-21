@@ -19,14 +19,14 @@ def test_anonymous_session_sets_opaque_http_only_cookie_and_stores_only_hash(
     assert user is not None
     assert user.credential_hash != token
     assert len(user.credential_hash) == 64
-    assert response.json()["anonymousId"] == user.id
+    assert response.json() == {"isNew": True}
 
 
 def test_existing_session_is_reused(client, api_session) -> None:
     first = client.post("/api/public/session")
     second = client.post("/api/public/session")
 
-    assert first.json()["anonymousId"] == second.json()["anonymousId"]
+    assert first.json()["isNew"] is True
     assert second.json()["isNew"] is False
 
 

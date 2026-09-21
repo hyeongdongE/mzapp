@@ -12,6 +12,7 @@ from app.models.tables import (
     EntityResolutionAttemptRawFetch,
     Evidence,
     PipelineRun,
+    ProductTrendCard,
     RawFetch,
     TrendEntity,
     TrendSnapshot,
@@ -72,7 +73,12 @@ async def test_pipeline_persists_versions_entity_and_wikidata_raw_fetches(db_ses
                 raw_responses=[
                     WikidataRawResponse(
                         "https://www.wikidata.org/w/api.php?action=wbsearchentities",
-                        b'{"search":[]}',
+                        (
+                            b'{"entities":{"Q123":{"labels":{"ko":{"value":'
+                            b'"\\uc774\\ud604\\uc911"}},"descriptions":{"ko":{"value":'
+                            b'"\\ub300\\ud55c\\ubbfc\\uad6d\\uc758 \\ub18d\\uad6c '
+                            b'\\uc120\\uc218"}},"aliases":{},"claims":{"P31":[]}}}}'
+                        ),
                         AS_OF,
                     )
                 ],
@@ -110,6 +116,17 @@ async def test_pipeline_persists_versions_entity_and_wikidata_raw_fetches(db_ses
     unknown_cause = next(claim for claim in claims if claim.kind == "CAUSE")
     assert unknown_cause.text == UNKNOWN_CAUSE_MESSAGE
     assert unknown_cause.publishable is True
+    assert db_session.scalar(select(ProductTrendCard)) is None
+
+    next_as_of = AS_OF + timedelta(minutes=2)
+    next_run = await PipelineService(
+        db_session,
+        FakeWikidata(),
+        now=lambda: AS_OF + timedelta(minutes=3),
+    ).build_entities(next_as_of)
+    card = db_session.scalar(select(ProductTrendCard))
+    assert card is not None
+    assert card.pipeline_run_id == next_run.id
 
 
 @pytest.mark.asyncio
@@ -190,3 +207,36 @@ async def test_targeted_smoke_resolves_only_requested_candidate(db_session) -> N
     attempts = list(db_session.scalars(select(EntityResolutionAttempt)))
     assert len(attempts) == 1
     assert attempts[0].candidate_id == target.id
+
+
+@pytest.mark.asyncio
+async def test_projection_failure_marks_live_run_failed_without_cards(
+    db_session, monkeypatch
+) -> None:
+    add_observation(db_session, item_id="projection-failure", text="topic", source_timestamp=AS_OF)
+
+    class FakeWikidata:
+        collector_version = "wikidata-api-v1"
+
+        async def lookup(self, query: str) -> WikidataLookup:
+            return WikidataLookup(
+                matches=[WikidataMatch("Q_FAIL", query, (), "description", ())],
+                raw_responses=[],
+            )
+
+    def fail_projection(self, as_of):
+        del self, as_of
+        raise RuntimeError("projection failed")
+
+    monkeypatch.setattr(
+        "app.services.pipeline.ProductCardService.sync_live", fail_projection
+    )
+
+    with pytest.raises(RuntimeError, match="projection failed"):
+        await PipelineService(
+            db_session, FakeWikidata(), now=lambda: AS_OF
+        ).build_entities(AS_OF)
+
+    run = db_session.scalar(select(PipelineRun))
+    assert run.status is RunStatus.FAILED
+    assert db_session.scalar(select(ProductTrendCard)) is None

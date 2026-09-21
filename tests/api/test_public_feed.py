@@ -1,7 +1,8 @@
 import pytest
+from sqlalchemy import select
 
 from app.models.enums import Category, CategoryAvailability, ReviewStatus, RunKind, RunStatus
-from app.models.tables import CategorySetting
+from app.models.tables import CategorySetting, Claim, ClaimSnapshot
 from tests.api.public_fixtures import authenticate_with_interest, seed_live_card
 
 
@@ -82,3 +83,33 @@ def test_ineligible_detail_is_not_disclosed(client, api_session) -> None:
     authenticate_with_interest(client)
 
     assert client.get(f"/api/public/trends/{card.public_id}").status_code == 404
+
+
+def test_feed_requires_publishable_what_and_interest_claims(client, api_session) -> None:
+    card = seed_live_card(api_session)
+    interest_link = api_session.scalar(
+        select(ClaimSnapshot)
+        .join(Claim, Claim.id == ClaimSnapshot.claim_id)
+        .where(
+            ClaimSnapshot.snapshot_id == card.snapshot_id,
+            Claim.kind == "INTEREST",
+        )
+    )
+    api_session.delete(interest_link)
+    api_session.commit()
+    authenticate_with_interest(client)
+
+    assert client.get("/api/public/feed").json()["items"] == []
+
+
+def test_feed_rejects_card_with_mismatched_snapshot_provenance(client, api_session) -> None:
+    card = seed_live_card(api_session, title="mismatched card")
+    other = seed_live_card(api_session, title="other entity")
+    other_snapshot_id = other.snapshot_id
+    api_session.delete(other)
+    api_session.flush()
+    card.snapshot_id = other_snapshot_id
+    api_session.commit()
+    authenticate_with_interest(client)
+
+    assert client.get("/api/public/feed").json()["items"] == []

@@ -12,13 +12,16 @@ from app.models.enums import (
     FeedbackType,
     HumanEvaluationLabel,
     ProductEventType,
+    PublicationPolicyMode,
     ReviewStatus,
 )
 from app.models.tables import (
     AnonymousUser,
+    CategorySetting,
     Claim,
     ClaimSnapshot,
     HumanEvaluation,
+    PipelineRun,
     ProductEvent,
     ProductTrendCard,
     Review,
@@ -26,7 +29,9 @@ from app.models.tables import (
     TrendEntity,
     TrendFeedback,
     TrendInteraction,
+    TrendSnapshot,
 )
+from app.product.policy import PublicationContext, PublicationPolicyEvaluator
 
 
 def _rate(numerator: int, denominator: int) -> float | None:
@@ -154,7 +159,22 @@ class ProductAnalytics:
             "d7_return_rate": _rate(d7, len(users)),
         }
 
-    def category_performance(self) -> list[dict[str, object]]:
+    def category_performance(
+        self, *, now: datetime | None = None, window_days: int = 14
+    ) -> list[dict[str, object]]:
+        if window_days <= 0:
+            raise ValueError("window_days must be positive")
+        window_end = now or datetime.now(UTC)
+        window_start = window_end - timedelta(days=window_days)
+        latest_review_ids = (
+            select(func.max(Review.id))
+            .where(
+                Review.product_card_id.is_not(None),
+                Review.created_at >= window_start,
+                Review.created_at <= window_end,
+            )
+            .group_by(Review.product_card_id)
+        )
         rows: list[dict[str, object]] = []
         for category in Category:
             if category is Category.OTHER:
@@ -163,7 +183,11 @@ class ProductAnalytics:
                 self._session.scalars(
                     select(HumanEvaluation)
                     .join(TrendEntity, TrendEntity.id == HumanEvaluation.entity_id)
-                    .where(TrendEntity.category == category)
+                    .where(
+                        TrendEntity.category == category,
+                        HumanEvaluation.created_at >= window_start,
+                        HumanEvaluation.created_at <= window_end,
+                    )
                 )
             )
             labels = Counter(row.label for row in evaluations)
@@ -177,7 +201,6 @@ class ProductAnalytics:
                     HumanEvaluationLabel.NOT_USEFUL,
                 )
             )
-            days = len({row.created_at.date() for row in evaluations})
             feedback = list(
                 self._session.scalars(
                     select(TrendFeedback)
@@ -185,20 +208,36 @@ class ProductAnalytics:
                     .where(
                         ProductTrendCard.data_mode == DataMode.LIVE,
                         ProductTrendCard.category == category,
+                        ProductTrendCard.observed_at >= window_start,
+                        ProductTrendCard.observed_at <= window_end,
                     )
                 )
             )
             feedback_counts = Counter(row.feedback_type for row in feedback)
-            auto_reviews = list(
+            cards = list(
                 self._session.scalars(
-                    select(Review)
-                    .join(TrendEntity, TrendEntity.id == Review.entity_id)
+                    select(ProductTrendCard)
                     .where(
-                        TrendEntity.category == category,
-                        Review.auto_pipeline_result.is_(True),
+                        ProductTrendCard.data_mode == DataMode.LIVE,
+                        ProductTrendCard.category == category,
+                        ProductTrendCard.observed_at >= window_start,
+                        ProductTrendCard.observed_at <= window_end,
                     )
                 )
             )
+            latest_reviews = list(
+                self._session.scalars(
+                    select(Review).where(
+                        Review.id.in_(latest_review_ids),
+                        Review.category_at_review == category,
+                    )
+                )
+            )
+            auto_reviews = [
+                review
+                for review in latest_reviews
+                if review.auto_pipeline_result is True
+            ]
             approved = sum(
                 review.resulting_status is ReviewStatus.APPROVED for review in auto_reviews
             )
@@ -217,15 +256,19 @@ class ProductAnalytics:
                     .where(
                         ProductTrendCard.data_mode == DataMode.LIVE,
                         ProductTrendCard.category == category,
+                        ProductTrendCard.observed_at >= window_start,
+                        ProductTrendCard.observed_at <= window_end,
                     )
                     .distinct()
                 )
             )
             unsupported = sum(not claim.publishable for claim in claims)
+            shadow_eligible = sum(self._shadow_auto_eligible(card) for card in cards)
             rows.append(
                 {
                     "category": category.value,
-                    "valid_trends_per_day": round(usable / days, 2) if days else None,
+                    "window_days": window_days,
+                    "valid_trends_per_day": round(usable / window_days, 2),
                     "usable_card_rate": _rate(usable, reviewed),
                     "noise_rate": _rate(noise, reviewed),
                     "false_positive_rate": _rate(reviewed - usable, reviewed),
@@ -239,9 +282,58 @@ class ProductAnalytics:
                     "incorrect_feedback_rate": _rate(
                         feedback_counts[FeedbackType.INCORRECT], len(feedback)
                     ),
+                    "auto_publishable_cards": sum(
+                        card.auto_pipeline_result for card in cards
+                    ),
+                    "shadow_auto_eligible_cards": shadow_eligible,
+                    "human_reviewed_cards": len(latest_reviews),
                     "auto_publishable_reviewed": len(auto_reviews),
                     "human_approval_rate": _rate(approved, len(auto_reviews)),
                     "review_rejection_rate": _rate(rejected, len(auto_reviews)),
                 }
             )
         return rows
+
+    def _shadow_auto_eligible(self, card: ProductTrendCard) -> bool:
+        row = self._session.execute(
+            select(TrendEntity, TrendSnapshot, PipelineRun, CategorySetting)
+            .select_from(TrendEntity)
+            .join(TrendSnapshot, TrendSnapshot.id == card.snapshot_id)
+            .join(PipelineRun, PipelineRun.id == card.pipeline_run_id)
+            .join(CategorySetting, CategorySetting.category == TrendEntity.category)
+            .where(
+                TrendEntity.id == card.entity_id,
+                TrendEntity.category == card.category,
+                TrendSnapshot.entity_id == card.entity_id,
+                TrendSnapshot.pipeline_run_id == card.pipeline_run_id,
+            )
+        ).one_or_none()
+        if row is None:
+            return False
+        entity, _snapshot, run, category = row
+        claim_kinds = set(
+            self._session.scalars(
+                select(Claim.kind)
+                .join(ClaimSnapshot, ClaimSnapshot.claim_id == Claim.id)
+                .where(
+                    ClaimSnapshot.snapshot_id == card.snapshot_id,
+                    Claim.entity_id == card.entity_id,
+                    Claim.publishable.is_(True),
+                )
+            )
+        )
+        decision = PublicationPolicyEvaluator(
+            PublicationPolicyMode.AUTO_PUBLISH_ELIGIBLE
+        ).evaluate(
+            PublicationContext(
+                data_mode=card.data_mode,
+                run_kind=run.kind,
+                run_status=run.status,
+                has_publishable_claims={"WHAT", "INTEREST"} <= claim_kinds,
+                category_status=category.status,
+                review_status=entity.review_status,
+                suppressed=card.suppressed,
+                auto_pipeline_result=card.auto_pipeline_result,
+            )
+        )
+        return decision.auto_publish_eligible

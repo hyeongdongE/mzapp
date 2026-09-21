@@ -55,7 +55,7 @@ def test_test_mode_card_is_never_public_even_when_demo_is_enabled(api_session) -
 
 
 def test_live_cookie_is_not_reused_for_demo_session(client, api_session) -> None:
-    live = client.post("/api/public/session").json()
+    assert client.post("/api/public/session").json()["isNew"] is True
     live_token = client.cookies.get("trend_radar_session")
 
     with demo_client(api_session) as demo:
@@ -63,7 +63,6 @@ def test_live_cookie_is_not_reused_for_demo_session(client, api_session) -> None
         created = demo.post("/api/public/session").json()
 
     assert created["isNew"] is True
-    assert created["anonymousId"] != live["anonymousId"]
     assert {user.data_mode for user in api_session.scalars(select(AnonymousUser))} == {
         DataMode.LIVE,
         DataMode.DEMO,

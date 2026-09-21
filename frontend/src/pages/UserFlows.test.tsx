@@ -31,7 +31,7 @@ function response(body: unknown, status = 200): Promise<Response> {
 function installApi(items = [card]) {
   fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input)
-    if (path.endsWith('/session')) return response({ anonymousId: 'u1', isNew: false }, 201)
+    if (path.endsWith('/session')) return response({ isNew: false }, 201)
     if (path.endsWith('/categories')) return response({ dataMode: 'DEMO', items: [
       { category: 'FOOD', label: '음식', status: 'EXPERIMENTAL' },
       { category: 'AI_TECH', label: 'AI / IT', status: 'EXPERIMENTAL' },

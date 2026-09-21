@@ -60,7 +60,7 @@ def create_session(request: Request, response: Response, session: SessionDepende
         max_age=60 * 60 * 24 * 180,
         path="/",
     )
-    return {"anonymousId": user.id, "isNew": is_new}
+    return {"isNew": is_new}
 
 
 @router.get("/categories")

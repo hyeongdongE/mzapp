@@ -12,7 +12,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  createSession: () => request<{ anonymousId: string; isNew: boolean }>('/api/public/session', { method: 'POST' }),
+  createSession: () => request<{ isNew: boolean }>('/api/public/session', { method: 'POST' }),
   categories: () => request<CategoriesResponse>('/api/public/categories'),
   interests: () => request<{ categories: Category[] }>('/api/public/me/interests'),
   updateInterests: (categories: Category[]) => request<{ categories: Category[] }>('/api/public/me/interests', {

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.models.enums import Category, DataMode, ReviewAction, ReviewStatus
@@ -56,14 +56,17 @@ class ReviewService:
             )
 
         previous_status = entity.review_status
-        auto_pipeline_result = self._session.scalar(
-            select(ProductTrendCard.auto_pipeline_result)
+        product_card = self._session.scalar(
+            select(ProductTrendCard)
             .where(
                 ProductTrendCard.entity_id == entity.id,
                 ProductTrendCard.data_mode == DataMode.LIVE,
             )
             .order_by(ProductTrendCard.observed_at.desc(), ProductTrendCard.id.desc())
             .limit(1)
+        )
+        auto_pipeline_result = (
+            product_card.auto_pipeline_result if product_card is not None else None
         )
         payload: dict[str, object] = {"previous_version": entity.version}
         if command.action is ReviewAction.APPROVE:
@@ -78,6 +81,14 @@ class ReviewService:
             payload["previous_category"] = entity.category.value if entity.category else None
             payload["category"] = command.category.value
             entity.category = command.category
+            self._session.execute(
+                update(ProductTrendCard)
+                .where(
+                    ProductTrendCard.entity_id == entity.id,
+                    ProductTrendCard.data_mode == DataMode.LIVE,
+                )
+                .values(category=command.category, updated_at=now)
+            )
         elif command.action is ReviewAction.MERGE:
             target = self._target(command, entity)
             self._merge(entity, target)
@@ -127,6 +138,9 @@ class ReviewService:
         return self._repo.add(
             Review(
                 entity_id=entity.id,
+                product_card_id=product_card.id if product_card is not None else None,
+                snapshot_id=product_card.snapshot_id if product_card is not None else None,
+                category_at_review=entity.category,
                 action=command.action,
                 actor=command.actor,
                 reason=command.reason,

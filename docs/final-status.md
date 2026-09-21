@@ -18,13 +18,20 @@ move to `EXPERIMENTAL`, preferably at least two before personalization validatio
 
 Fresh MVP verification on 2026-09-21:
 
-- Python: `223 passed, 13 skipped`; Ruff passed.
+- Python: `228 passed, 14 skipped`; Ruff passed.
 - Frontend: `6 passed`; TypeScript check and production Vite build passed.
 - Native browser smoke: DEMO onboarding with three interests, personalized feed, and evidence detail
   passed with no browser console warnings or errors.
 - PostgreSQL integration and Docker image build were not rerun in this session because the local
   Docker daemon and port 5432 were unavailable. The PostgreSQL-only tests therefore account for the
-  13 explicit skips; no pass is claimed for unavailable infrastructure.
+  14 explicit skips; no pass is claimed for unavailable infrastructure. A dedicated `0009`
+  upgrade/downgrade/seed integration test is present and remains among those skips.
+
+Independent MVP review initially found four High issues: scheduled projection was not wired,
+category changes could leave stale card categories, feed claim/provenance checks were incomplete,
+and review agreement metrics were not card-stable. All four were fixed with regression tests before
+final re-review. Remaining concurrency/upsert work is production hardening, not a reason to weaken
+the current fail-closed feed.
 
 ## Implemented
 

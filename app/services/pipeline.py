@@ -26,6 +26,7 @@ from app.pipeline.candidate import CandidateGenerator
 from app.pipeline.classification import EntityClassifier
 from app.pipeline.detection import TrendDetector
 from app.pipeline.entity import EntityResolver, validate_live_cutoff
+from app.product.cards import ProductCardService
 from app.services.collection import CollectionService
 
 
@@ -172,14 +173,15 @@ class PipelineService:
                 prompt_version=versions.prompt,
                 score_version=versions.score,
             )
+            run.status = RunStatus.SUCCEEDED
+            run.completed_at = self._now().astimezone(UTC)
+            self._session.flush()
+            ProductCardService(self._session).sync_live(as_of)
         except Exception:
             run.status = RunStatus.FAILED
             run.completed_at = self._now().astimezone(UTC)
             self._session.flush()
             raise
-        run.status = RunStatus.SUCCEEDED
-        run.completed_at = self._now().astimezone(UTC)
-        self._session.flush()
         return run
 
     def _persist_wikidata_raw(self, response: WikidataRawResponse) -> int:

@@ -46,6 +46,8 @@ from the cookie credential.
 Public APIs expose neither raw payloads, internal scores/breakdowns, credential hashes, nor internal
 database IDs. Unknown or ineligible cards return 404. `/internal/*` retains the dashboard access
 guard. The PWA contains no secrets and its service worker never caches `/api/*` responses.
+It also excludes `/internal`, dashboard static assets, and health responses; only the public shell
+and immutable frontend assets receive offline caching.
 
 `LIVE`, `DEMO`, and `TEST` are explicit database values. Production public APIs use LIVE only;
 DEMO requires `DEMO_MODE_ENABLED=true`, uses separately approved fixtures and demo users, and is

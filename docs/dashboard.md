@@ -51,6 +51,10 @@ Supported review actions are `APPROVE`, `REJECT`, `MERGE`, `SPLIT`, `CHANGE_CATE
 3. applies the mutation and appends a `reviews` audit row in one transaction,
 4. rejects stale writes with HTTP 409 and invalid requests with HTTP 422.
 
+Each applicable review also freezes its LIVE product-card ID, snapshot ID, category at review,
+automatic pipeline result, and human override reason. `CHANGE_CATEGORY` updates existing LIVE
+projections in the same transaction so an old enabled category cannot remain publicly visible.
+
 `MERGE` transfers all candidate links and non-duplicate aliases to the selected target. `SPLIT`
 transfers only the explicitly submitted candidate IDs, all of which must belong to the source.
 Human evaluation labels are appended independently to `human_evaluations`.

@@ -164,9 +164,14 @@ def test_user_records_are_tenant_scoped_and_mode_tagged() -> None:
     )
     assert "data_mode" in tables["product_trend_cards"].columns
     assert "data_mode" in tables["product_events"].columns
-    assert {"previous_status", "resulting_status", "auto_pipeline_result"} <= set(
-        tables["reviews"].columns.keys()
-    )
+    assert {
+        "previous_status",
+        "resulting_status",
+        "auto_pipeline_result",
+        "product_card_id",
+        "snapshot_id",
+        "category_at_review",
+    } <= set(tables["reviews"].columns.keys())
 
 
 def test_derived_records_preserve_algorithm_versions() -> None:

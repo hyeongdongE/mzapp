@@ -6,6 +6,12 @@ excluded. Product rates use explicit feedback or interaction denominators; missi
 unavailable, not zero. The internal category view reports discovery value and already-known rates
 beside Data PoC usable/noise facts, but operators—not code—decide category status.
 
+Category operations use a rolling 14-day LIVE window. Valid trends/day divides by all 14 calendar
+days, including zero-result days. Automatic-pipeline and human-review agreement is card-based:
+reviews retain the product card, snapshot, and category at review time, and repeated decisions use
+the latest review per card. The view separately reports pipeline-publishable cards, policy shadow
+eligibility, human-reviewed cards, and automatically publishable cards that received review.
+
 Evaluation uses explicit UTC half-open periods (`start <= timestamp < end`). It computes facts from
 stored official observations and append-only review history; it does not interpret a trend score as
 a probability. Every zero denominator is rendered as `N/A`, never as `0%`.
