@@ -21,6 +21,11 @@ API are same-origin, so no wildcard CORS configuration is needed; state-changing
 enforce the request origin. LIVE mode, manual approval, secure cookies, and disabled LLM/Meta
 providers are fixed in the Compose file.
 
+Uvicorn trusts forwarded scheme/host headers because Caddy terminates TLS. That trust is safe only
+within this topology: the API port remains Docker-internal plus host-loopback and must never be
+published on a LAN/public interface. This lets HTTPS browser origins match the reconstructed HTTPS
+request URL while Caddy remains the sole network-facing entry point.
+
 ## Prerequisites
 
 - Linux x86_64 or arm64 host supported by the selected Docker images
@@ -170,6 +175,7 @@ automatically downgrade the database; restore the backup only as an explicit rec
 - FastAPI port 8000 is bound to `127.0.0.1` only for the SSH-tunneled internal dashboard.
 - Caddy serves HTTPS and blocks public internal/review/static-dashboard routes.
 - `.env.production` and SQL backups are not committed; file permissions are restricted.
+- `.env.production`, `backups/`, and SQL dumps are excluded from the Docker build context.
 - `DEMO_MODE_ENABLED=false`, `MANUAL_APPROVAL_REQUIRED`, and secure session cookies are fixed.
 - LLM and Meta providers remain disabled; no credentials are needed for them.
 - Docker logs rotate at 10 MB with three files per long-running service.

@@ -100,6 +100,7 @@ PostgreSQL opt-in tests require an already migrated, isolated database through
 
 - [Implementation plan](docs/poc-plan.md)
 - [Official data sources](docs/data-sources.md)
+- [GeekNews LIVE verification](docs/geeknews-live-verification.md)
 - [Entity resolution](docs/entity-resolution.md)
 - [Classification](docs/classification.md)
 - [Trend scoring](docs/trend-scoring.md)

@@ -65,6 +65,8 @@ services:
       - "8000"
       - --workers
       - "1"
+      - --proxy-headers
+      - --forwarded-allow-ips=*
     ports:
       - "127.0.0.1:${INTERNAL_API_PORT:-8000}:8000"
     healthcheck:
