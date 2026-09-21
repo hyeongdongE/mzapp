@@ -65,6 +65,10 @@ def test_reject_action_is_audited_and_atomic(
     review = api_session.scalar(select(Review).where(Review.entity_id == entity.id))
     assert review is not None
     assert review.reason == "NEWS_ONLY"
+    assert review.previous_status is ReviewStatus.PENDING
+    assert review.resulting_status is ReviewStatus.REJECTED
+    assert review.auto_pipeline_result is None
+    assert review.human_override_reason == "NEWS_ONLY"
     assert api_session.get(TrendEntity, entity.id).review_status is ReviewStatus.REJECTED
     assert api_session.get(TrendEntity, entity.id).version == 2
 

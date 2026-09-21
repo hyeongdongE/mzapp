@@ -49,6 +49,7 @@ class ReviewService:
                 f"expected version {command.expected_version}, current version {entity.version}"
             )
 
+        previous_status = entity.review_status
         payload: dict[str, object] = {"previous_version": entity.version}
         if command.action is ReviewAction.APPROVE:
             entity.review_status = ReviewStatus.APPROVED
@@ -102,6 +103,9 @@ class ReviewService:
                 actor=command.actor,
                 reason=command.reason,
                 payload=payload,
+                previous_status=previous_status,
+                resulting_status=entity.review_status,
+                human_override_reason=command.reason,
                 created_at=now,
             )
         )

@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from app.ai.summary import SummaryService
 from app.db import session_scope
 from app.models.tables import TrendSnapshot
+from app.product.cards import ProductCardService
 from app.services.pipeline import PipelineVersions
 from scripts.collect import parse_as_of
 
@@ -34,10 +35,11 @@ async def generate(as_of_text: str | None, top_n: int) -> None:
             prompt_version=versions.prompt,
             score_version=versions.score,
         )
+        product_cards = ProductCardService(session).sync_live(as_of)
         publishable = sum(claim.publishable for claim in claims)
         print(
             f"as_of={as_of.isoformat()} claims={len(claims)} "
-            f"publishable={publishable} provider=evidence-only"
+            f"publishable={publishable} product_cards={product_cards} provider=evidence-only"
         )
 
 

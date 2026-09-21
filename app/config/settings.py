@@ -5,6 +5,8 @@ from functools import lru_cache
 from pydantic import HttpUrl, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.models.enums import PublicationPolicyMode
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -27,6 +29,11 @@ class Settings(BaseSettings):
     dashboard_api_key: SecretStr | None = None
     meta_provider_enabled: bool = False
     llm_provider_enabled: bool = False
+    publication_policy_mode: PublicationPolicyMode = (
+        PublicationPolicyMode.MANUAL_APPROVAL_REQUIRED
+    )
+    demo_mode_enabled: bool = False
+    secure_session_cookie: bool = True
 
     @field_validator("dashboard_api_key", mode="before")
     @classmethod
