@@ -141,7 +141,7 @@ def test_candidate_list_exposes_score_breakdown_and_source_attribution(
 ) -> None:
     entity = seed_visible_entity(api_session)
 
-    response = client.get("/candidates")
+    response = client.get("/internal/candidates")
 
     assert response.status_code == 200
     assert entity.canonical_name in response.text
@@ -157,7 +157,7 @@ def test_detail_exposes_evidence_timestamp_and_score_interpretation(
 ) -> None:
     entity = seed_visible_entity(api_session)
 
-    response = client.get(f"/entities/{entity.id}")
+    response = client.get(f"/internal/entities/{entity.id}")
 
     assert response.status_code == 200
     assert "확률이 아닌 내부 상대 점수" in response.text
@@ -175,7 +175,7 @@ def test_today_page_shows_required_supply_counters(
 ) -> None:
     seed_visible_entity(api_session)
 
-    response = client.get("/?date=2026-09-21")
+    response = client.get("/internal?date=2026-09-21")
 
     assert response.status_code == 200
     assert "Raw candidates" in response.text

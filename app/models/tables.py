@@ -487,6 +487,9 @@ class AnonymousUser(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     credential_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    data_mode: Mapped[DataMode] = mapped_column(
+        enum_column(DataMode), nullable=False, default=DataMode.LIVE
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

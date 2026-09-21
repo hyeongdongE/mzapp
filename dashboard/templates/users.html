@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Users · Trend Radar{% endblock %}
+{% block content %}
+<h1>LIVE users</h1>
+<p>DEMO and TEST users are excluded.</p>
+<dl class="metrics">
+  <div><dt>Users</dt><dd>{{ metrics.users }}</dd></div>
+  <div><dt>D1 return</dt><dd>{{ metrics.d1_return_rate if metrics.d1_return_rate is not none else "Unavailable" }}</dd></div>
+  <div><dt>D7 return</dt><dd>{{ metrics.d7_return_rate if metrics.d7_return_rate is not none else "Unavailable" }}</dd></div>
+</dl>
+{% endblock %}

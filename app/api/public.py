@@ -8,9 +8,10 @@ from app.api.public_dependencies import (
     SessionDependency,
     enforce_same_origin,
 )
-from app.models.enums import Category, NotificationMode
+from app.models.enums import Category, DataMode, NotificationMode, ProductEventType
+from app.product.analytics import ProductAnalytics
 from app.product.feed import FeedService
-from app.product.schemas import FeedbackInput, InterestsInput, SettingsInput
+from app.product.schemas import EventInput, FeedbackInput, InterestsInput, SettingsInput
 from app.product.users import UserService
 
 router = APIRouter(
@@ -37,7 +38,15 @@ def create_session(request: Request, response: Response, session: SessionDepende
     is_new = user is None
     token = existing_token
     if user is None:
-        user, token = service.create()
+        user, token = service.create(
+            data_mode=(
+                DataMode.DEMO
+                if request.app.state.settings.demo_mode_enabled
+                else DataMode.LIVE
+            )
+        )
+    else:
+        ProductAnalytics(session).record(user, ProductEventType.RETURN_VISIT)
     assert token is not None
     settings = request.app.state.settings
     secure = settings.secure_session_cookie
@@ -86,6 +95,9 @@ def put_interests(
         selected = UserService(session).replace_interests(user.id, payload.categories)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    analytics = ProductAnalytics(session)
+    for category in selected:
+        analytics.record(user, ProductEventType.INTEREST_SELECTED, category=category)
     return {"categories": [category.value for category in selected]}
 
 
@@ -124,6 +136,7 @@ def _feed_service(request: Request, session: SessionDependency) -> FeedService:
 
 @router.get("/feed")
 def feed(request: Request, user: CurrentUser, session: SessionDependency) -> dict:
+    ProductAnalytics(session).record(user, ProductEventType.FEED_VIEWED)
     return {
         "dataMode": "LIVE",
         "items": _feed_service(request, session).ranked_items(user.id),
@@ -139,6 +152,7 @@ def trend_detail(
     if card is None:
         raise HTTPException(status_code=404, detail="trend not found")
     service.record_open(user.id, card.id)
+    ProductAnalytics(session).record(user, ProductEventType.TREND_OPENED, card=card)
     return service.detail(user.id, card)
 
 
@@ -155,6 +169,13 @@ def put_feedback(
     if card is None:
         raise HTTPException(status_code=404, detail="trend not found")
     feedback = service.feedback(user.id, card.id, payload.feedback_type)
+    event_type = {
+        "NEW_AND_USEFUL": ProductEventType.FEEDBACK_NEW_USEFUL,
+        "ALREADY_KNEW": ProductEventType.FEEDBACK_ALREADY_KNEW,
+        "NOT_INTERESTED": ProductEventType.FEEDBACK_NOT_INTERESTED,
+        "INCORRECT": ProductEventType.FEEDBACK_INCORRECT,
+    }[feedback.feedback_type.value]
+    ProductAnalytics(session).record(user, event_type, card=card)
     return {"feedback": feedback.feedback_type.value}
 
 
@@ -167,6 +188,7 @@ def save_trend(
     if card is None:
         raise HTTPException(status_code=404, detail="trend not found")
     service.save(user.id, card.id)
+    ProductAnalytics(session).record(user, ProductEventType.TREND_SAVED, card=card)
     return {"saved": True}
 
 
@@ -185,3 +207,26 @@ def unsave_trend(
 @router.get("/saved")
 def saved(request: Request, user: CurrentUser, session: SessionDependency) -> dict:
     return {"dataMode": "LIVE", "items": _feed_service(request, session).saved_items(user.id)}
+
+
+@router.post("/events", status_code=status.HTTP_202_ACCEPTED)
+def create_event(
+    payload: EventInput,
+    request: Request,
+    user: CurrentUser,
+    session: SessionDependency,
+) -> dict:
+    analytics = ProductAnalytics(session)
+    if payload.event_type is ProductEventType.ONBOARDING_STARTED:
+        analytics.record(user, payload.event_type)
+        return {"accepted": True}
+    if payload.event_type is ProductEventType.TREND_IMPRESSION:
+        if not payload.trend_id:
+            raise HTTPException(status_code=422, detail="trendId is required")
+        service = _feed_service(request, session)
+        card = service.get_eligible(user.id, payload.trend_id)
+        if card is None:
+            raise HTTPException(status_code=404, detail="trend not found")
+        analytics.impression(user, card)
+        return {"accepted": True}
+    raise HTTPException(status_code=422, detail="event is recorded by the server")

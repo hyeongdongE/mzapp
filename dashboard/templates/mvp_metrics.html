@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}MVP metrics · Trend Radar{% endblock %}
+{% block content %}
+<h1>LIVE MVP metrics</h1>
+<p>DEMO and TEST activity is excluded. Missing denominators are shown as unavailable.</p>
+<dl class="metrics">
+{% for key, value in metrics.items() %}
+  <div><dt>{{ key.replace('_', ' ') }}</dt><dd>{{ value if value is not none else "Unavailable" }}</dd></div>
+{% endfor %}
+</dl>
+{% endblock %}

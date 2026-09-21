@@ -18,7 +18,7 @@ from app.services.reviews import (
     StaleReview,
 )
 
-router = APIRouter(dependencies=[Depends(require_dashboard_access)])
+router = APIRouter(prefix="/internal", dependencies=[Depends(require_dashboard_access)])
 SessionDependency = Annotated[Session, Depends(get_db)]
 
 
@@ -61,7 +61,7 @@ def create_review(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (ReviewError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return RedirectResponse(f"/entities/{entity_id}", status_code=303)
+    return RedirectResponse(f"/internal/entities/{entity_id}", status_code=303)
 
 
 @router.post("/evaluations")
@@ -82,4 +82,4 @@ def create_evaluation(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return RedirectResponse(f"/entities/{entity_id}", status_code=303)
+    return RedirectResponse(f"/internal/entities/{entity_id}", status_code=303)

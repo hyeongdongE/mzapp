@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.models.enums import (
     Category,
     CategoryAvailability,
+    DataMode,
     NotificationMode,
 )
 from app.models.tables import (
@@ -29,12 +30,15 @@ class UserService:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def create(self, now: datetime | None = None) -> tuple[AnonymousUser, str]:
+    def create(
+        self, now: datetime | None = None, *, data_mode: DataMode = DataMode.LIVE
+    ) -> tuple[AnonymousUser, str]:
         timestamp = now or datetime.now(UTC)
         token = secrets.token_urlsafe(32)
         user = AnonymousUser(
             id=str(uuid4()),
             credential_hash=credential_hash(token),
+            data_mode=data_mode,
             created_at=timestamp,
             last_seen_at=timestamp,
         )

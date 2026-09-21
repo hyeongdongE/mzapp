@@ -49,7 +49,7 @@ def test_reject_action_is_audited_and_atomic(
     entity = seed_entity(api_session)
 
     response = client.post(
-        "/reviews",
+        "/internal/reviews",
         data={
             "entity_id": entity.id,
             "action": "REJECT",
@@ -79,7 +79,7 @@ def test_stale_review_version_returns_conflict_without_audit(
     entity = seed_entity(api_session)
 
     response = client.post(
-        "/reviews",
+        "/internal/reviews",
         data={
             "entity_id": entity.id,
             "action": "APPROVE",
@@ -100,7 +100,7 @@ def test_invalid_change_category_is_atomic(
     entity = seed_entity(api_session)
 
     response = client.post(
-        "/reviews",
+        "/internal/reviews",
         data={
             "entity_id": entity.id,
             "action": "CHANGE_CATEGORY",
@@ -122,7 +122,7 @@ def test_human_evaluation_label_is_recorded(
     entity = seed_entity(api_session)
 
     response = client.post(
-        "/evaluations",
+        "/internal/evaluations",
         data={
             "entity_id": entity.id,
             "label": "VALID_TREND",
@@ -196,7 +196,7 @@ def test_merge_moves_candidate_and_alias_and_audits_target(
     api_session.commit()
 
     response = client.post(
-        "/reviews",
+        "/internal/reviews",
         data={
             "entity_id": source.id,
             "action": "MERGE",
@@ -268,7 +268,7 @@ def test_split_moves_only_explicit_candidates(
     api_session.commit()
 
     response = client.post(
-        "/reviews",
+        "/internal/reviews",
         data={
             "entity_id": source.id,
             "action": "SPLIT",

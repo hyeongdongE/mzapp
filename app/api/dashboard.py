@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db, require_dashboard_access
-from app.models.enums import Category, ReviewAction, Source
+from app.models.enums import Category, DataMode, ReviewAction, Source
 from app.models.tables import (
     CandidateObservation,
     Claim,
@@ -25,6 +25,7 @@ from app.models.tables import (
     TrendEntity,
     TrendSnapshot,
 )
+from app.product.analytics import ProductAnalytics
 
 SOURCE_NAMES = {
     Source.GOOGLE_TRENDS: "Google Trends",
@@ -34,11 +35,11 @@ SOURCE_NAMES = {
 templates = Jinja2Templates(
     directory=Path(__file__).resolve().parents[2] / "dashboard" / "templates"
 )
-router = APIRouter(dependencies=[Depends(require_dashboard_access)])
+router = APIRouter(prefix="/internal", dependencies=[Depends(require_dashboard_access)])
 SessionDependency = Annotated[Session, Depends(get_db)]
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("", response_class=HTMLResponse)
 def today(
     request: Request,
     session: SessionDependency,
@@ -211,3 +212,21 @@ def detail(
             ),
         },
     )
+
+
+@router.get("/users", response_class=HTMLResponse)
+def product_users(request: Request, session: SessionDependency) -> HTMLResponse:
+    metrics = ProductAnalytics(session).summary(DataMode.LIVE)
+    return templates.TemplateResponse(request, "users.html", {"metrics": metrics})
+
+
+@router.get("/mvp-metrics", response_class=HTMLResponse)
+def mvp_metrics(request: Request, session: SessionDependency) -> HTMLResponse:
+    metrics = ProductAnalytics(session).summary(DataMode.LIVE)
+    return templates.TemplateResponse(request, "mvp_metrics.html", {"metrics": metrics})
+
+
+@router.get("/category-performance", response_class=HTMLResponse)
+def category_performance(request: Request, session: SessionDependency) -> HTMLResponse:
+    rows = ProductAnalytics(session).category_performance()
+    return templates.TemplateResponse(request, "category_performance.html", {"rows": rows})

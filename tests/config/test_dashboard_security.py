@@ -40,5 +40,7 @@ def test_public_dashboard_rejects_missing_or_wrong_api_key() -> None:
     )
 
     with TestClient(public_app) as client:
-        assert client.get("/").status_code == 401
-        assert client.get("/", headers={"X-API-Key": "wrong"}).status_code == 401
+        assert client.get("/internal").status_code == 401
+        assert client.get(
+            "/internal", headers={"X-API-Key": "wrong"}
+        ).status_code == 401

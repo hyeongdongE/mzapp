@@ -119,6 +119,7 @@ def upgrade() -> None:
         "anonymous_users",
         sa.Column("id", sa.String(length=36), primary_key=True),
         sa.Column("credential_hash", sa.String(length=64), nullable=False, unique=True),
+        sa.Column("data_mode", _enum(), nullable=False, server_default="LIVE"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=False),
     )
