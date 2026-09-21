@@ -107,6 +107,7 @@ PostgreSQL opt-in tests require an already migrated, isolated database through
 - [Dashboard](docs/dashboard.md)
 - [Evaluation](docs/evaluation.md)
 - [Replay and operations](docs/operations.md)
+- [Mini PC production deployment](docs/mini-pc-deployment.md)
 - [Security](docs/security.md)
 - [Final status and criteria](docs/final-status.md)
 
