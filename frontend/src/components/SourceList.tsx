@@ -3,6 +3,7 @@ import { Clock, ExternalLink } from 'lucide-react'
 const sourceLabels: Record<string, string> = {
   GOOGLE_TRENDS: 'Google Trends',
   WIKIMEDIA: 'Wikimedia',
+  DEMO_FIXTURE: '데모 데이터',
 }
 
 function observedLabel(value: string) {
@@ -19,7 +20,7 @@ export default function SourceList({ sources }: { sources: Array<{ source: strin
     <ul className="source-list">
       {sources.map((source) => (
         <li key={`${source.source}-${source.url}`}>
-          <a href={source.url} rel="noreferrer" target="_blank">{sourceLabels[source.source] ?? source.source}에서 확인 <ExternalLink aria-hidden="true" size={15} /></a>
+          <a href={source.url} rel="noreferrer" target="_blank">{sourceLabels[source.source] ?? '공식 데이터 소스'}에서 확인 <ExternalLink aria-hidden="true" size={15} /></a>
           <time dateTime={source.observedAt}><Clock aria-hidden="true" size={14} />{observedLabel(source.observedAt)}</time>
         </li>
       ))}

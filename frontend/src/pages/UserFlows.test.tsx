@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test, vi } from 'vitest'
 
 import App from '../App'
+import SourceList from '../components/SourceList'
 
 const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)
@@ -28,7 +29,10 @@ function response(body: unknown, status = 200): Promise<Response> {
   }))
 }
 
-function installApi(items = [card]) {
+function installApi(
+  items = [card],
+  settingsRequests: { get?: Promise<Response>; put?: Promise<Response> } = {},
+) {
   fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input)
     if (path.endsWith('/session')) return response({ isNew: false }, 201)
@@ -39,8 +43,8 @@ function installApi(items = [card]) {
     if (path.endsWith('/me/interests')) return response({ categories: ['FOOD'] })
     if (path.endsWith('/feed')) return response({ dataMode: 'DEMO', items })
     if (path.endsWith('/saved')) return response({ dataMode: 'DEMO', items })
-    if (path.endsWith('/settings') && init?.method === 'PUT') return response({})
-    if (path.endsWith('/settings')) return response({ categories: ['FOOD'], notificationMode: 'OFF', pushDeliveryEnabled: false })
+    if (path.endsWith('/settings') && init?.method === 'PUT') return settingsRequests.put ?? response({})
+    if (path.endsWith('/settings')) return settingsRequests.get ?? response({ categories: ['FOOD'], notificationMode: 'OFF', pushDeliveryEnabled: false })
     if (path.endsWith('/trends/trend-1') && !init?.method) return response({
       ...card,
       what: '피스타치오를 활용한 디저트입니다.',
@@ -154,4 +158,52 @@ test('saved and settings routes render persisted user state', async () => {
   await waitFor(() => expect(food).toBeChecked())
   expect(screen.getByRole('radio', { name: '알림 끔' })).toBeChecked()
   expect(screen.getByText(/실제 알림은 아직 보내지 않아요/)).toBeInTheDocument()
+})
+
+test('Saved removes an unsaved card and Detail returns to the originating screen', async () => {
+  installApi([{ ...card, saved: true }])
+  window.history.pushState({}, '', '/saved')
+  render(<App />)
+
+  const trend = await screen.findByRole('link', { name: /피스타치오 디저트/ })
+  await userEvent.click(trend)
+  await waitFor(() => expect(window.location.pathname).toBe('/trends/trend-1'))
+  await userEvent.click(await screen.findByRole('link', { name: '이전 화면으로 돌아가기' }))
+  await waitFor(() => expect(window.location.pathname).toBe('/saved'))
+
+  await userEvent.click(await screen.findByRole('button', { name: '저장 취소' }))
+  expect(await screen.findByText('아직 저장한 트렌드가 없어요')).toBeInTheDocument()
+  expect(screen.queryByText('피스타치오 디저트')).not.toBeInTheDocument()
+})
+
+test('settings waits for persisted values and locks the form while saving', async () => {
+  let resolveGet!: (value: Response) => void
+  let resolvePut!: (value: Response) => void
+  const get = new Promise<Response>((resolve) => { resolveGet = resolve })
+  const put = new Promise<Response>((resolve) => { resolvePut = resolve })
+  installApi([card], { get, put })
+  window.history.pushState({}, '', '/settings')
+  render(<App />)
+
+  expect(await screen.findByText('설정을 불러오는 중…')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '설정 저장' })).not.toBeInTheDocument()
+
+  resolveGet(await response({ categories: ['FOOD'], notificationMode: 'OFF', pushDeliveryEnabled: false }))
+  const save = await screen.findByRole('button', { name: '설정 저장' })
+  await userEvent.click(save)
+  expect(screen.getByRole('button', { name: '저장 중…' })).toBeDisabled()
+
+  resolvePut(await response({}))
+  expect(await screen.findByRole('button', { name: '저장했습니다' })).toBeEnabled()
+})
+
+test('source labels never expose internal source enums', () => {
+  render(<SourceList sources={[
+    { source: 'DEMO_FIXTURE', url: 'https://example.test/demo', observedAt: card.observedAt },
+    { source: 'FUTURE_SOURCE_ENUM', url: 'https://example.test/future', observedAt: card.observedAt },
+  ]} />)
+
+  expect(screen.getByRole('link', { name: /데모 데이터에서 확인/ })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: /공식 데이터 소스에서 확인/ })).toBeInTheDocument()
+  expect(screen.queryByText(/DEMO_FIXTURE|FUTURE_SOURCE_ENUM/)).not.toBeInTheDocument()
 })

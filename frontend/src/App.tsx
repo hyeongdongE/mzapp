@@ -42,7 +42,7 @@ function BottomNav() {
   return (
     <nav className="bottom-nav" aria-label="주요 메뉴">
       {items.map(({ to, label, icon: Icon }) => (
-        <Link className={location.pathname.startsWith(to) ? 'active' : ''} key={to} to={to}>
+        <Link aria-current={location.pathname.startsWith(to) ? 'page' : undefined} className={location.pathname.startsWith(to) ? 'active' : ''} key={to} to={to}>
           <Icon aria-hidden="true" size={20} strokeWidth={2.1} />
           <span>{label}</span>
         </Link>

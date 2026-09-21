@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { Bookmark, BookmarkCheck } from 'lucide-react'
 
 import { api } from '../api'
@@ -20,12 +20,19 @@ function freshness(value: string) {
   return `${Math.floor(hours / 24)}일 전`
 }
 
-export default function TrendCard({ item, compact = false }: { item: TrendItem; compact?: boolean }) {
+export default function TrendCard({ item, compact = false, onSavedChange }: { item: TrendItem; compact?: boolean; onSavedChange?: (saved: boolean) => void }) {
   const [saved, setSaved] = useState(item.saved)
   const [saveBusy, setSaveBusy] = useState(false)
   const [notice, setNotice] = useState('')
   const observed = useRef(false)
   const root = useRef<HTMLElement>(null)
+  const location = useLocation()
+
+  useEffect(() => {
+    if (!notice) return
+    const timer = window.setTimeout(() => setNotice(''), 2200)
+    return () => window.clearTimeout(timer)
+  }, [notice])
 
   useEffect(() => {
     const record = () => {
@@ -49,7 +56,9 @@ export default function TrendCard({ item, compact = false }: { item: TrendItem; 
     try {
       if (saved) await api.unsave(item.trendId)
       else await api.save(item.trendId)
-      setSaved(!saved)
+      const nextSaved = !saved
+      setSaved(nextSaved)
+      onSavedChange?.(nextSaved)
       setNotice(saved ? '저장을 취소했어요' : '저장했어요')
     } finally {
       setSaveBusy(false)
@@ -65,7 +74,7 @@ export default function TrendCard({ item, compact = false }: { item: TrendItem; 
           {saved ? <BookmarkCheck aria-hidden="true" size={20} /> : <Bookmark aria-hidden="true" size={20} />}
         </button>
       </div>
-      <Link className="card-link" to={`/trends/${item.trendId}`}>
+      <Link className="card-link" state={{ from: location.pathname }} to={`/trends/${item.trendId}`}>
         <h2>{item.title}</h2>
         <p>{item.summary}</p>
       </Link>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import { Bookmark, BookmarkCheck, ChevronLeft } from 'lucide-react'
 
 import { api } from '../api'
@@ -10,12 +10,20 @@ import type { TrendDetail as Detail } from '../types'
 
 export default function TrendDetail() {
   const { id = '' } = useParams()
+  const location = useLocation()
   const [detail, setDetail] = useState<Detail | null>(null)
   const [reported, setReported] = useState(false)
   const [saved, setSaved] = useState(false)
   const [notice, setNotice] = useState('')
   useEffect(() => { void api.trend(id).then((result) => { setDetail(result); setSaved(result.saved) }) }, [id])
+  useEffect(() => {
+    if (!notice) return
+    const timer = window.setTimeout(() => setNotice(''), 2200)
+    return () => window.clearTimeout(timer)
+  }, [notice])
   if (!detail) return <main className="state-page" aria-live="polite">근거를 확인하는 중…</main>
+  const sourcePath = (location.state as { from?: string } | null)?.from
+  const returnTo = sourcePath && ['/feed', '/explore', '/saved'].includes(sourcePath) ? sourcePath : '/feed'
 
   async function toggleSave(current: Detail) {
     if (saved) await api.unsave(current.trendId)
@@ -27,7 +35,7 @@ export default function TrendDetail() {
   return (
     <main className="page detail-page">
       <div className="detail-topbar">
-        <Link className="back-link" aria-label="피드로 돌아가기" to="/feed"><ChevronLeft aria-hidden="true" size={24} /></Link>
+        <Link className="back-link" aria-label="이전 화면으로 돌아가기" to={returnTo}><ChevronLeft aria-hidden="true" size={24} /></Link>
         <button className="save-button" aria-label={saved ? '저장 취소' : '저장'} aria-pressed={saved} onClick={() => void toggleSave(detail)}>
           {saved ? <BookmarkCheck aria-hidden="true" size={20} /> : <Bookmark aria-hidden="true" size={20} />}
         </button>
