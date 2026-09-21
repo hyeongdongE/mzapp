@@ -33,7 +33,7 @@ class Settings(BaseSettings):
         PublicationPolicyMode.MANUAL_APPROVAL_REQUIRED
     )
     demo_mode_enabled: bool = False
-    secure_session_cookie: bool = True
+    secure_session_cookie: bool | None = None
 
     @field_validator("dashboard_api_key", mode="before")
     @classmethod
