@@ -27,9 +27,6 @@ def upgrade() -> None:
     op.add_column("reviews", sa.Column("resulting_status", _enum(), nullable=True))
     op.add_column("reviews", sa.Column("auto_pipeline_result", sa.Boolean(), nullable=True))
     op.add_column("reviews", sa.Column("human_override_reason", sa.Text(), nullable=True))
-    op.add_column("reviews", sa.Column("product_card_id", sa.Integer(), nullable=True))
-    op.add_column("reviews", sa.Column("snapshot_id", sa.Integer(), nullable=True))
-    op.add_column("reviews", sa.Column("category_at_review", _enum(), nullable=True))
 
     op.create_table(
         "category_settings",
@@ -118,23 +115,6 @@ def upgrade() -> None:
         "product_trend_cards",
         ["data_mode", "category", "observed_at"],
     )
-    op.create_foreign_key(
-        "fk_reviews_product_card_id",
-        "reviews",
-        "product_trend_cards",
-        ["product_card_id"],
-        ["id"],
-    )
-    op.create_foreign_key(
-        "fk_reviews_snapshot_id",
-        "reviews",
-        "trend_snapshots",
-        ["snapshot_id"],
-        ["id"],
-    )
-    op.create_index(
-        "ix_reviews_product_card_time", "reviews", ["product_card_id", "created_at"]
-    )
 
     op.create_table(
         "anonymous_users",
@@ -222,16 +202,10 @@ def downgrade() -> None:
     op.drop_table("notification_preferences")
     op.drop_table("user_interests")
     op.drop_table("anonymous_users")
-    op.drop_index("ix_reviews_product_card_time", table_name="reviews")
-    op.drop_constraint("fk_reviews_snapshot_id", "reviews", type_="foreignkey")
-    op.drop_constraint("fk_reviews_product_card_id", "reviews", type_="foreignkey")
     op.drop_index("ix_product_card_mode_category_time", table_name="product_trend_cards")
     op.drop_index("ix_product_trend_cards_public_id", table_name="product_trend_cards")
     op.drop_table("product_trend_cards")
     op.drop_table("category_settings")
-    op.drop_column("reviews", "category_at_review")
-    op.drop_column("reviews", "snapshot_id")
-    op.drop_column("reviews", "product_card_id")
     op.drop_column("reviews", "human_override_reason")
     op.drop_column("reviews", "auto_pipeline_result")
     op.drop_column("reviews", "resulting_status")

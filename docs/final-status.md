@@ -24,8 +24,9 @@ Fresh MVP verification on 2026-09-21:
   passed with no browser console warnings or errors.
 - PostgreSQL integration and Docker image build were not rerun in this session because the local
   Docker daemon and port 5432 were unavailable. The PostgreSQL-only tests therefore account for the
-  14 explicit skips; no pass is claimed for unavailable infrastructure. A dedicated `0009`
-  upgrade/downgrade/seed integration test is present and remains among those skips.
+  14 explicit skips; no pass is claimed for unavailable infrastructure. A dedicated
+  `0009 → 0010 → 0009 → head` upgrade/downgrade integration test is present and remains among
+  those skips.
 
 Independent MVP review initially found four High issues: scheduled projection was not wired,
 category changes could leave stale card categories, feed claim/provenance checks were incomplete,

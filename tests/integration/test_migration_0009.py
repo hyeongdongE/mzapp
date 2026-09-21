@@ -16,13 +16,13 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_0009_upgrade_downgrade_seeds_disabled_categories_and_review_provenance() -> None:
+def test_0010_upgrades_an_existing_0009_database_with_review_provenance() -> None:
     assert TEST_DATABASE_URL is not None
     os.environ["DATABASE_URL"] = TEST_DATABASE_URL
     get_settings.cache_clear()
     config = Config("alembic.ini")
-    command.upgrade(config, "0008")
-    command.upgrade(config, "0009")
+    command.upgrade(config, "head")
+    command.downgrade(config, "0009")
 
     engine = create_engine(TEST_DATABASE_URL)
     with engine.connect() as connection:
@@ -34,7 +34,7 @@ def test_0009_upgrade_downgrade_seeds_disabled_categories_and_review_provenance(
         ).all()
         assert len(categories) == 8
         assert {row.status for row in categories} == {"DISABLED"}
-        review_columns = {
+        original_review_columns = {
             row.column_name
             for row in connection.execute(
                 text(
@@ -47,15 +47,9 @@ def test_0009_upgrade_downgrade_seeds_disabled_categories_and_review_provenance(
                 )
             )
         }
-        assert {
-            "previous_status",
-            "resulting_status",
-            "auto_pipeline_result",
-            "human_override_reason",
-            "product_card_id",
-            "snapshot_id",
-            "category_at_review",
-        } <= review_columns
+        assert "product_card_id" not in original_review_columns
+        assert "snapshot_id" not in original_review_columns
+        assert "category_at_review" not in original_review_columns
         constraints = {
             row.conname
             for row in connection.execute(
@@ -71,21 +65,48 @@ def test_0009_upgrade_downgrade_seeds_disabled_categories_and_review_provenance(
         assert "ck_product_card_mode_provenance" in constraints
     engine.dispose()
 
-    command.downgrade(config, "0008")
-    downgraded = create_engine(TEST_DATABASE_URL)
-    with downgraded.connect() as connection:
-        assert connection.execute(
-            text("SELECT to_regclass('product_trend_cards')")
-        ).scalar_one() is None
+    command.upgrade(config, "0010")
+    upgraded = create_engine(TEST_DATABASE_URL)
+    with upgraded.connect() as connection:
         assert connection.execute(
             text("SELECT version_num FROM alembic_version")
-        ).scalar_one() == "0008"
-    downgraded.dispose()
+        ).scalar_one() == "0010"
+        review_columns = {
+            row.column_name
+            for row in connection.execute(
+                text(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = current_schema()
+                      AND table_name = 'reviews'
+                    """
+                )
+            )
+        }
+        assert {"product_card_id", "snapshot_id", "category_at_review"} <= review_columns
+    upgraded.dispose()
 
-    command.upgrade(config, "0009")
-    reupgraded = create_engine(TEST_DATABASE_URL)
-    with reupgraded.connect() as connection:
+    command.downgrade(config, "0009")
+    downgraded = create_engine(TEST_DATABASE_URL)
+    with downgraded.connect() as connection:
+        columns = {
+            row.column_name
+            for row in connection.execute(
+                text(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = current_schema()
+                      AND table_name = 'reviews'
+                    """
+                )
+            )
+        }
+        assert "product_card_id" not in columns
         assert connection.execute(
             text("SELECT count(*) FROM category_settings WHERE status = 'DISABLED'")
         ).scalar_one() == 8
-    reupgraded.dispose()
+    downgraded.dispose()
+
+    command.upgrade(config, "head")

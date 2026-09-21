@@ -109,7 +109,7 @@ def test_0008_quarantines_legacy_publishable_claim_without_snapshot_provenance()
     with verification.connect() as connection:
         assert connection.execute(
             text("SELECT version_num FROM alembic_version")
-        ).scalar_one() == "0009"
+        ).scalar_one() == "0010"
         claim = connection.execute(
             text(
                 """
