@@ -65,10 +65,11 @@ def create_session(request: Request, response: Response, session: SessionDepende
 
 
 @router.get("/categories")
-def categories(session: SessionDependency) -> dict:
-    rows = UserService(session).selectable_categories()
+def categories(request: Request, session: SessionDependency) -> dict:
+    mode = DataMode.DEMO if request.app.state.settings.demo_mode_enabled else DataMode.LIVE
+    rows = UserService(session).selectable_categories(mode)
     return {
-        "dataMode": "LIVE",
+        "dataMode": mode.value,
         "items": [
             {
                 "category": row.category.value,
@@ -92,7 +93,9 @@ def put_interests(
     payload: InterestsInput, user: CurrentUser, session: SessionDependency
 ) -> dict:
     try:
-        selected = UserService(session).replace_interests(user.id, payload.categories)
+        selected = UserService(session).replace_interests(
+            user.id, payload.categories, data_mode=user.data_mode
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     analytics = ProductAnalytics(session)
@@ -117,7 +120,9 @@ def put_user_settings(
 ) -> dict:
     service = UserService(session)
     try:
-        selected = service.replace_interests(user.id, payload.categories)
+        selected = service.replace_interests(
+            user.id, payload.categories, data_mode=user.data_mode
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     mode: NotificationMode = service.set_notification_mode(
@@ -131,14 +136,17 @@ def put_user_settings(
 
 
 def _feed_service(request: Request, session: SessionDependency) -> FeedService:
-    return FeedService(session, request.app.state.settings.publication_policy_mode)
+    mode = DataMode.DEMO if request.app.state.settings.demo_mode_enabled else DataMode.LIVE
+    return FeedService(
+        session, request.app.state.settings.publication_policy_mode, data_mode=mode
+    )
 
 
 @router.get("/feed")
 def feed(request: Request, user: CurrentUser, session: SessionDependency) -> dict:
     ProductAnalytics(session).record(user, ProductEventType.FEED_VIEWED)
     return {
-        "dataMode": "LIVE",
+        "dataMode": user.data_mode.value,
         "items": _feed_service(request, session).ranked_items(user.id),
     }
 
@@ -206,7 +214,10 @@ def unsave_trend(
 
 @router.get("/saved")
 def saved(request: Request, user: CurrentUser, session: SessionDependency) -> dict:
-    return {"dataMode": "LIVE", "items": _feed_service(request, session).saved_items(user.id)}
+    return {
+        "dataMode": user.data_mode.value,
+        "items": _feed_service(request, session).saved_items(user.id),
+    }
 
 
 @router.post("/events", status_code=status.HTTP_202_ACCEPTED)

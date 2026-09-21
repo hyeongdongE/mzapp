@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -18,12 +19,19 @@ from app.models.tables import (
     AnonymousUser,
     CategorySetting,
     NotificationPreference,
+    ProductTrendCard,
     UserInterest,
 )
 
 
 def credential_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+@dataclass(frozen=True)
+class CategoryOption:
+    category: Category
+    status: CategoryAvailability
 
 
 class UserService:
@@ -57,18 +65,34 @@ class UserService:
             self._session.flush()
         return user
 
-    def selectable_categories(self) -> list[CategorySetting]:
-        return list(
-            self._session.scalars(
-                select(CategorySetting)
+    def selectable_categories(
+        self, data_mode: DataMode = DataMode.LIVE
+    ) -> list[CategoryOption]:
+        if data_mode is DataMode.DEMO:
+            categories = self._session.scalars(
+                select(ProductTrendCard.category)
                 .where(
-                    CategorySetting.status.in_(
-                        [CategoryAvailability.EXPERIMENTAL, CategoryAvailability.ENABLED]
-                    )
+                    ProductTrendCard.data_mode == DataMode.DEMO,
+                    ProductTrendCard.fixture_approved.is_(True),
+                    ProductTrendCard.suppressed.is_(False),
                 )
-                .order_by(CategorySetting.category)
+                .distinct()
+                .order_by(ProductTrendCard.category)
             )
+            return [
+                CategoryOption(category, CategoryAvailability.EXPERIMENTAL)
+                for category in categories
+            ]
+        rows = self._session.scalars(
+            select(CategorySetting)
+            .where(
+                CategorySetting.status.in_(
+                    [CategoryAvailability.EXPERIMENTAL, CategoryAvailability.ENABLED]
+                )
+            )
+            .order_by(CategorySetting.category)
         )
+        return [CategoryOption(row.category, row.status) for row in rows]
 
     def interests(self, user_id: str) -> list[Category]:
         return list(
@@ -80,12 +104,17 @@ class UserService:
         )
 
     def replace_interests(
-        self, user_id: str, categories: list[Category], now: datetime | None = None
+        self,
+        user_id: str,
+        categories: list[Category],
+        now: datetime | None = None,
+        *,
+        data_mode: DataMode = DataMode.LIVE,
     ) -> list[Category]:
         unique = sorted(set(categories), key=lambda item: item.value)
         if not unique or Category.OTHER in unique:
             raise ValueError("select at least one available category")
-        allowed = {row.category for row in self.selectable_categories()}
+        allowed = {row.category for row in self.selectable_categories(data_mode)}
         if not set(unique) <= allowed:
             raise ValueError("one or more categories are not available")
         timestamp = now or datetime.now(UTC)

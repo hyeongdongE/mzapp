@@ -473,6 +473,7 @@ class ProductTrendCard(Base):
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     trend_score: Mapped[float] = mapped_column(Float, nullable=False)
     auto_pipeline_result: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    fixture_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     suppressed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

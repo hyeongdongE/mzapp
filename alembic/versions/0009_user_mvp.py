@@ -88,6 +88,7 @@ def upgrade() -> None:
         sa.Column("observed_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("trend_score", sa.Float(), nullable=False),
         sa.Column("auto_pipeline_result", sa.Boolean(), nullable=False),
+        sa.Column("fixture_approved", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("suppressed", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column(
             "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False

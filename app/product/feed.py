@@ -36,14 +36,27 @@ class FeedService:
         self._data_mode = data_mode
 
     def eligible_cards(self, user_id: str) -> list[ProductTrendCard]:
-        if self._data_mode is not DataMode.LIVE:
-            return []
         interests = set(
             self._session.scalars(
                 select(UserInterest.category).where(UserInterest.user_id == user_id)
             )
         )
         if not interests:
+            return []
+        if self._data_mode is DataMode.DEMO:
+            return list(
+                self._session.scalars(
+                    select(ProductTrendCard)
+                    .where(
+                        ProductTrendCard.data_mode == DataMode.DEMO,
+                        ProductTrendCard.category.in_(interests),
+                        ProductTrendCard.fixture_approved.is_(True),
+                        ProductTrendCard.suppressed.is_(False),
+                    )
+                    .order_by(ProductTrendCard.observed_at.desc())
+                )
+            )
+        if self._data_mode is not DataMode.LIVE:
             return []
         rows = self._session.execute(
             select(ProductTrendCard, TrendEntity, PipelineRun, CategorySetting)
@@ -254,4 +267,5 @@ class FeedService:
             "saved": saved,
             "feedback": feedback.feedback_type.value if feedback else None,
             "rankingReasons": reasons or [],
+            "dataMode": card.data_mode.value,
         }
