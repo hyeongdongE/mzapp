@@ -1,0 +1,8 @@
+{$TREND_RADAR_DOMAIN} {
+	encode zstd gzip
+
+	@internal path /internal /internal/* /static /static/* /docs /docs/* /redoc /openapi.json
+	respond @internal 404
+
+	reverse_proxy api:8000
+}
