@@ -31,8 +31,10 @@ Fresh MVP verification on 2026-09-21:
 Independent MVP review initially found four High issues: scheduled projection was not wired,
 category changes could leave stale card categories, feed claim/provenance checks were incomplete,
 and review agreement metrics were not card-stable. All four were fixed with regression tests before
-final re-review. Remaining concurrency/upsert work is production hardening, not a reason to weaken
-the current fail-closed feed.
+re-review. A follow-up caught and corrected an in-place migration revision change by restoring
+`0009` and adding linear revision `0010`. Final independent review: **Critical 0, High 0,
+Ready: Yes**. Remaining concurrency/upsert work is production hardening, not a reason to weaken the
+current fail-closed feed.
 
 ## Implemented
 
