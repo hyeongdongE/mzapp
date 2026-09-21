@@ -22,6 +22,7 @@ from app.models.tables import (
     TrendCandidate,
     TrendEntity,
 )
+from tests.api.public_fixtures import seed_live_card
 
 NOW = datetime(2026, 9, 21, 2, tzinfo=UTC)
 
@@ -68,7 +69,7 @@ def test_reject_action_is_audited_and_atomic(
     assert review.previous_status is ReviewStatus.PENDING
     assert review.resulting_status is ReviewStatus.REJECTED
     assert review.auto_pipeline_result is None
-    assert review.human_override_reason == "NEWS_ONLY"
+    assert review.human_override_reason is None
     assert api_session.get(TrendEntity, entity.id).review_status is ReviewStatus.REJECTED
     assert api_session.get(TrendEntity, entity.id).version == 2
 
@@ -92,6 +93,56 @@ def test_stale_review_version_returns_conflict_without_audit(
     assert api_session.scalar(select(func.count()).select_from(Review)) == 0
     api_session.expire_all()
     assert api_session.get(TrendEntity, entity.id).review_status is ReviewStatus.PENDING
+
+
+def test_review_records_automatic_pipeline_result_for_future_agreement_metrics(
+    client: TestClient, api_session: Session
+) -> None:
+    card = seed_live_card(api_session, review_status=ReviewStatus.PENDING)
+    entity = api_session.get(TrendEntity, card.entity_id)
+
+    response = client.post(
+        "/internal/reviews",
+        data={
+            "entity_id": entity.id,
+            "action": "APPROVE",
+            "version": entity.version,
+            "actor": "local-reviewer",
+            "reason": "evidence verified",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    review = api_session.scalar(select(Review).where(Review.entity_id == entity.id))
+    assert review.auto_pipeline_result is True
+    assert review.resulting_status is ReviewStatus.APPROVED
+    assert review.human_override_reason is None
+
+
+def test_review_records_reason_only_when_human_overrides_pipeline(
+    client: TestClient, api_session: Session
+) -> None:
+    card = seed_live_card(api_session, review_status=ReviewStatus.PENDING)
+    entity = api_session.get(TrendEntity, card.entity_id)
+
+    response = client.post(
+        "/internal/reviews",
+        data={
+            "entity_id": entity.id,
+            "action": "REJECT",
+            "version": entity.version,
+            "actor": "local-reviewer",
+            "reason": "unsupported context",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    review = api_session.scalar(select(Review).where(Review.entity_id == entity.id))
+    assert review.auto_pipeline_result is True
+    assert review.resulting_status is ReviewStatus.REJECTED
+    assert review.human_override_reason == "unsupported context"
 
 
 def test_invalid_change_category_is_atomic(

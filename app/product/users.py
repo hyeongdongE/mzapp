@@ -54,12 +54,19 @@ class UserService:
         self._session.flush()
         return user, token
 
-    def find(self, token: str, now: datetime | None = None) -> AnonymousUser | None:
-        user = self._session.scalar(
-            select(AnonymousUser).where(
-                AnonymousUser.credential_hash == credential_hash(token)
-            )
+    def find(
+        self,
+        token: str,
+        now: datetime | None = None,
+        *,
+        data_mode: DataMode | None = None,
+    ) -> AnonymousUser | None:
+        query = select(AnonymousUser).where(
+            AnonymousUser.credential_hash == credential_hash(token)
         )
+        if data_mode is not None:
+            query = query.where(AnonymousUser.data_mode == data_mode)
+        user = self._session.scalar(query)
         if user is not None:
             user.last_seen_at = now or datetime.now(UTC)
             self._session.flush()

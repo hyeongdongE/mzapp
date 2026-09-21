@@ -1,5 +1,37 @@
 # Replay and operations
 
+## User MVP publication operations
+
+All real categories are seeded `DISABLED`. Operators change `category_settings` only after reviewing
+category-level valid trends/day, usable-card rate, noise rate, discovery value rate, and
+already-known rate at `/internal/category-performance`. Personalization validation should wait for
+at least two categories at `EXPERIMENTAL` or `ENABLED`.
+
+```powershell
+uv run python scripts/category_status.py list
+uv run python scripts/category_status.py set AI_TECH EXPERIMENTAL `
+  --actor operator-id --reason "14-day category evaluation passed"
+```
+
+Production uses `PUBLICATION_POLICY_MODE=MANUAL_APPROVAL_REQUIRED`. A LIVE card additionally needs a
+successful LIVE run, snapshot-linked publishable claims, an enabled/experimental category, current
+human `APPROVED` state, and no suppression. `AUTO_PUBLISH_ELIGIBLE` is a shadow mode: it measures
+automatic eligibility but preserves manual publication. `AUTO_PUBLISH` removes that manual gate;
+do not enable it until false positives, unsupported claims, review rejection, usable-card rate, and
+incorrect-user-feedback are stable.
+
+Demo fixtures are opt-in and bounded:
+
+```powershell
+$env:DEMO_MODE_ENABLED='true'
+uv run python scripts/demo_data.py seed
+uv run python scripts/demo_data.py clean
+uv run python scripts/demo_data.py clean --execute
+```
+
+The preview reports the exact DEMO card count. Cleanup removes only DEMO cards and their isolated
+users/interactions/events. It never changes LIVE pipeline or evaluation rows.
+
 ## Replay semantics
 
 `scripts/replay.py` accepts an inclusive ISO date range. Date-only `--from` maps to UTC day start;

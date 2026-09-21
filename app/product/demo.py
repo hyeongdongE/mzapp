@@ -9,11 +9,13 @@ from sqlalchemy.orm import Session
 from app.models.enums import Category, DataMode, TrendLifecycle
 from app.models.tables import (
     AnonymousUser,
+    NotificationPreference,
     ProductEvent,
     ProductTrendCard,
     SavedTrend,
     TrendFeedback,
     TrendInteraction,
+    UserInterest,
 )
 
 DEMO_FIXTURES = (
@@ -97,6 +99,17 @@ class DemoDataService:
                 self._session.execute(delete(model).where(model.card_id.in_(card_ids)))
         self._session.execute(
             delete(ProductEvent).where(ProductEvent.data_mode == DataMode.DEMO)
+        )
+        demo_user_ids = select(AnonymousUser.id).where(
+            AnonymousUser.data_mode == DataMode.DEMO
+        )
+        self._session.execute(
+            delete(NotificationPreference).where(
+                NotificationPreference.user_id.in_(demo_user_ids)
+            )
+        )
+        self._session.execute(
+            delete(UserInterest).where(UserInterest.user_id.in_(demo_user_ids))
         )
         self._session.execute(
             delete(AnonymousUser).where(AnonymousUser.data_mode == DataMode.DEMO)

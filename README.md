@@ -1,8 +1,9 @@
 # AI Personal Trend Radar Data PoC
 
-Official-data-only Python PoC for measuring whether Google Trends, Wikimedia, and Wikidata can
-sustain useful Korean trend cards. It is a modular monolith with a small internal review dashboard;
-it is not a consumer application.
+Official-data-only trend pipeline plus a mobile-first Personal Trend Radar PWA. The modular
+FastAPI/PostgreSQL application keeps the replayable Data PoC intact and adds anonymous interests,
+an evidence-gated personal feed, feedback, saves, notification preferences, and LIVE-only product
+analytics.
 
 Real LLM and Meta providers are disabled. No unofficial scraping, pytrends, private endpoints, or
 credential-dependent calls are required.
@@ -23,7 +24,9 @@ docker compose up -d api
 Invoke-RestMethod http://127.0.0.1:8000/healthz
 ```
 
-Open `http://127.0.0.1:8000/` for the local-only review dashboard.
+Open `http://127.0.0.1:8000/` for the user PWA and `/internal` for the local-only review dashboard.
+Production starts with every category `DISABLED`, so an honest empty state is expected until
+evaluation evidence supports an operational status change.
 
 Collect and process official data:
 
@@ -71,6 +74,23 @@ Verification:
 ```powershell
 uv run ruff check .
 uv run pytest -q
+Push-Location frontend
+npm ci
+npm test
+npm run typecheck
+npm run build
+Pop-Location
+```
+
+For isolated UX development, set `DEMO_MODE_ENABLED=true`, migrate the database, then seed explicit
+fixtures. DEMO users, cards, review state, events, and KPIs never enter LIVE evaluation or replay.
+
+```powershell
+$env:DEMO_MODE_ENABLED='true'
+uv run python scripts/demo_data.py seed
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+uv run python scripts/demo_data.py clean          # preview exact DEMO card count
+uv run python scripts/demo_data.py clean --execute
 ```
 
 PostgreSQL opt-in tests require an already migrated, isolated database through
@@ -90,5 +110,6 @@ PostgreSQL opt-in tests require an already migrated, isolated database through
 - [Security](docs/security.md)
 - [Final status and criteria](docs/final-status.md)
 
-Current evidence-based next decision: `CONTINUE_DATA_COLLECTION`. Only one complete official-source
-day is available, so `READY_FOR_USER_MVP` is not supported.
+Current evidence-based next decision remains `CONTINUE_DATA_COLLECTION`. The architecture and DEMO
+UX are testable, but no LIVE category is enabled and public user testing should not start until
+category-level evidence supports at least `EXPERIMENTAL` status.

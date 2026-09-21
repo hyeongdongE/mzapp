@@ -1,9 +1,15 @@
 import pytest
 from sqlalchemy import func, select
 
-from app.models.enums import DataMode
-from app.models.tables import ProductTrendCard
+from app.models.enums import Category, DataMode, NotificationMode
+from app.models.tables import (
+    AnonymousUser,
+    NotificationPreference,
+    ProductTrendCard,
+    UserInterest,
+)
 from app.product.demo import DemoDataService
+from app.product.users import UserService
 
 
 def test_demo_seed_refuses_when_explicit_mode_is_disabled(db_session) -> None:
@@ -43,3 +49,19 @@ def test_demo_cleanup_preview_and_execute_never_delete_live_rows(db_session) -> 
             ProductTrendCard.data_mode == DataMode.DEMO
         )
     ) == 0
+
+
+def test_demo_cleanup_removes_user_preferences_before_demo_users(db_session) -> None:
+    service = DemoDataService(db_session, enabled=True)
+    service.seed()
+    user_service = UserService(db_session)
+    user, _ = user_service.create(data_mode=DataMode.DEMO)
+    user_service.replace_interests(
+        user.id, [Category.AI_TECH], data_mode=DataMode.DEMO
+    )
+    user_service.set_notification_mode(user.id, NotificationMode.DAILY_DIGEST)
+
+    assert service.cleanup(execute=True) == 4
+    assert db_session.query(UserInterest).count() == 0
+    assert db_session.query(NotificationPreference).count() == 0
+    assert db_session.query(AnonymousUser).count() == 0

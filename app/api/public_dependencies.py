@@ -32,14 +32,12 @@ def current_user(
 ) -> AnonymousUser:
     if not token:
         raise HTTPException(status_code=401, detail="anonymous session required")
-    user = UserService(session).find(token)
-    if user is None:
-        raise HTTPException(status_code=401, detail="invalid anonymous session")
     expected_mode = (
         DataMode.DEMO if request.app.state.settings.demo_mode_enabled else DataMode.LIVE
     )
-    if user.data_mode is not expected_mode:
-        raise HTTPException(status_code=401, detail="session data mode mismatch")
+    user = UserService(session).find(token, data_mode=expected_mode)
+    if user is None:
+        raise HTTPException(status_code=401, detail="invalid anonymous session")
     return user
 
 

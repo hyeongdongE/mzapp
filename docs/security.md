@@ -36,6 +36,21 @@ facts. It does not collect consumer names, email, phone, precise location, conta
 or advertising identifiers. Review actor values are internal operational identifiers, not user
 profiles.
 
+The user MVP stores only a random anonymous-user UUID, a SHA-256 hash of a 256-bit session token,
+interest categories, product interactions, feedback, saved cards, notification preference, data
+mode, and timestamps. The raw token is held in an `HttpOnly`, `SameSite=Lax` cookie and is marked
+`Secure` outside explicit local development. Mutation requests with an `Origin` header must be
+same-origin. User IDs supplied by clients are ignored; every tenant-scoped query derives the user
+from the cookie credential.
+
+Public APIs expose neither raw payloads, internal scores/breakdowns, credential hashes, nor internal
+database IDs. Unknown or ineligible cards return 404. `/internal/*` retains the dashboard access
+guard. The PWA contains no secrets and its service worker never caches `/api/*` responses.
+
+`LIVE`, `DEMO`, and `TEST` are explicit database values. Production public APIs use LIVE only;
+DEMO requires `DEMO_MODE_ENABLED=true`, uses separately approved fixtures and demo users, and is
+excluded from LIVE product metrics, Data PoC evaluation, replay, and backtest.
+
 ## Reproducibility and integrity
 
 - Raw bytes are content-addressed and retained with acquisition/source timestamps and versions.

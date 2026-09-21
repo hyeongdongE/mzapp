@@ -33,18 +33,17 @@ CATEGORY_LABELS = {
 @router.post("/session", status_code=status.HTTP_201_CREATED)
 def create_session(request: Request, response: Response, session: SessionDependency) -> dict:
     service = UserService(session)
+    data_mode = (
+        DataMode.DEMO if request.app.state.settings.demo_mode_enabled else DataMode.LIVE
+    )
     existing_token = request.cookies.get(SESSION_COOKIE)
-    user = service.find(existing_token) if existing_token else None
+    user = (
+        service.find(existing_token, data_mode=data_mode) if existing_token else None
+    )
     is_new = user is None
     token = existing_token
     if user is None:
-        user, token = service.create(
-            data_mode=(
-                DataMode.DEMO
-                if request.app.state.settings.demo_mode_enabled
-                else DataMode.LIVE
-            )
-        )
+        user, token = service.create(data_mode=data_mode)
     else:
         ProductAnalytics(session).record(user, ProductEventType.RETURN_VISIT)
     assert token is not None

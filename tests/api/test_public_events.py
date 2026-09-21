@@ -26,6 +26,26 @@ def test_impression_event_is_validated_and_updates_interaction(client, api_sessi
     assert interaction.first_impression_at is not None
 
 
+def test_duplicate_impression_within_short_window_is_idempotent(client, api_session) -> None:
+    card = seed_live_card(api_session)
+    authenticate_with_interest(client)
+    payload = {"eventType": "TREND_IMPRESSION", "trendId": card.public_id}
+
+    assert client.post("/api/public/events", json=payload).status_code == 202
+    assert client.post("/api/public/events", json=payload).status_code == 202
+
+    interaction = api_session.scalar(select(TrendInteraction))
+    events = list(
+        api_session.scalars(
+            select(ProductEvent).where(
+                ProductEvent.event_type == ProductEventType.TREND_IMPRESSION
+            )
+        )
+    )
+    assert interaction.impression_count == 1
+    assert len(events) == 1
+
+
 def test_client_cannot_spoof_outcome_events(client, api_session) -> None:
     seed_live_card(api_session)
     authenticate_with_interest(client)

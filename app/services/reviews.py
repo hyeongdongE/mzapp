@@ -6,8 +6,14 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.enums import Category, ReviewAction, ReviewStatus
-from app.models.tables import EntityAlias, EntityCandidate, Review, TrendEntity
+from app.models.enums import Category, DataMode, ReviewAction, ReviewStatus
+from app.models.tables import (
+    EntityAlias,
+    EntityCandidate,
+    ProductTrendCard,
+    Review,
+    TrendEntity,
+)
 from app.repositories.reviews import ReviewRepository
 
 
@@ -50,6 +56,15 @@ class ReviewService:
             )
 
         previous_status = entity.review_status
+        auto_pipeline_result = self._session.scalar(
+            select(ProductTrendCard.auto_pipeline_result)
+            .where(
+                ProductTrendCard.entity_id == entity.id,
+                ProductTrendCard.data_mode == DataMode.LIVE,
+            )
+            .order_by(ProductTrendCard.observed_at.desc(), ProductTrendCard.id.desc())
+            .limit(1)
+        )
         payload: dict[str, object] = {"previous_version": entity.version}
         if command.action is ReviewAction.APPROVE:
             entity.review_status = ReviewStatus.APPROVED
@@ -96,6 +111,19 @@ class ReviewService:
         entity.version += 1
         entity.updated_at = now
         payload["new_version"] = entity.version
+        human_publish_result = (
+            entity.review_status is ReviewStatus.APPROVED
+            if entity.review_status
+            in (ReviewStatus.APPROVED, ReviewStatus.REJECTED, ReviewStatus.NOISE)
+            else None
+        )
+        human_override_reason = (
+            command.reason
+            if auto_pipeline_result is not None
+            and human_publish_result is not None
+            and auto_pipeline_result is not human_publish_result
+            else None
+        )
         return self._repo.add(
             Review(
                 entity_id=entity.id,
@@ -105,7 +133,8 @@ class ReviewService:
                 payload=payload,
                 previous_status=previous_status,
                 resulting_status=entity.review_status,
-                human_override_reason=command.reason,
+                auto_pipeline_result=auto_pipeline_result,
+                human_override_reason=human_override_reason,
                 created_at=now,
             )
         )

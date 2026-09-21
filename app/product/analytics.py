@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -16,6 +16,8 @@ from app.models.enums import (
 )
 from app.models.tables import (
     AnonymousUser,
+    Claim,
+    ClaimSnapshot,
     HumanEvaluation,
     ProductEvent,
     ProductTrendCard,
@@ -29,6 +31,10 @@ from app.models.tables import (
 
 def _rate(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator, 4) if denominator else None
+
+
+def _utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 class ProductAnalytics:
@@ -78,6 +84,11 @@ class ProductAnalytics:
             )
             self._session.add(interaction)
         else:
+            if (
+                interaction.last_impression_at is not None
+                and timestamp - _utc(interaction.last_impression_at) < timedelta(minutes=5)
+            ):
+                return
             interaction.first_impression_at = interaction.first_impression_at or timestamp
             interaction.last_impression_at = timestamp
             interaction.impression_count += 1
@@ -191,12 +202,34 @@ class ProductAnalytics:
             approved = sum(
                 review.resulting_status is ReviewStatus.APPROVED for review in auto_reviews
             )
+            rejected = sum(
+                review.resulting_status in (ReviewStatus.REJECTED, ReviewStatus.NOISE)
+                for review in auto_reviews
+            )
+            claims = list(
+                self._session.scalars(
+                    select(Claim)
+                    .join(ClaimSnapshot, ClaimSnapshot.claim_id == Claim.id)
+                    .join(
+                        ProductTrendCard,
+                        ProductTrendCard.snapshot_id == ClaimSnapshot.snapshot_id,
+                    )
+                    .where(
+                        ProductTrendCard.data_mode == DataMode.LIVE,
+                        ProductTrendCard.category == category,
+                    )
+                    .distinct()
+                )
+            )
+            unsupported = sum(not claim.publishable for claim in claims)
             rows.append(
                 {
                     "category": category.value,
                     "valid_trends_per_day": round(usable / days, 2) if days else None,
                     "usable_card_rate": _rate(usable, reviewed),
                     "noise_rate": _rate(noise, reviewed),
+                    "false_positive_rate": _rate(reviewed - usable, reviewed),
+                    "unsupported_claim_rate": _rate(unsupported, len(claims)),
                     "discovery_value_rate": _rate(
                         feedback_counts[FeedbackType.NEW_AND_USEFUL], len(feedback)
                     ),
@@ -208,6 +241,7 @@ class ProductAnalytics:
                     ),
                     "auto_publishable_reviewed": len(auto_reviews),
                     "human_approval_rate": _rate(approved, len(auto_reviews)),
+                    "review_rejection_rate": _rate(rejected, len(auto_reviews)),
                 }
             )
         return rows

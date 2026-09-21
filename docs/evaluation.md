@@ -1,5 +1,11 @@
 # Evaluation metrics and reports
 
+Product analytics is a separate LIVE-only view and never changes the replayable Data PoC
+evaluation. `DEMO` and `TEST` product cards, users, interactions, feedback, saves, and events are
+excluded. Product rates use explicit feedback or interaction denominators; missing denominators are
+unavailable, not zero. The internal category view reports discovery value and already-known rates
+beside Data PoC usable/noise facts, but operators—not code—decide category status.
+
 Evaluation uses explicit UTC half-open periods (`start <= timestamp < end`). It computes facts from
 stored official observations and append-only review history; it does not interpret a trend score as
 a probability. Every zero denominator is rendered as `N/A`, never as `0%`.

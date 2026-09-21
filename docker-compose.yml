@@ -22,6 +22,9 @@ services:
       # The published port below is host-loopback-only, so the dashboard stays in local mode.
       DASHBOARD_HOST: 127.0.0.1
       DASHBOARD_ALLOW_PUBLIC: "false"
+      PUBLICATION_POLICY_MODE: MANUAL_APPROVAL_REQUIRED
+      DEMO_MODE_ENABLED: "false"
+      SECURE_SESSION_COOKIE: "false"
     command:
       - sh
       - -c
