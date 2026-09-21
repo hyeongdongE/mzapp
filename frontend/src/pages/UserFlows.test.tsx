@@ -58,6 +58,19 @@ beforeEach(() => {
   fetchMock.mockReset()
 })
 
+test('mobile app shell exposes four primary destinations including Explore', async () => {
+  installApi()
+  window.history.pushState({}, '', '/feed')
+  render(<App />)
+
+  const navigation = await screen.findByRole('navigation', { name: '주요 메뉴' })
+  expect(navigation).toHaveClass('bottom-nav')
+  expect(screen.getByRole('link', { name: '홈' })).toHaveAttribute('href', '/feed')
+  expect(screen.getByRole('link', { name: '둘러보기' })).toHaveAttribute('href', '/explore')
+  expect(screen.getByRole('link', { name: '저장' })).toHaveAttribute('href', '/saved')
+  expect(screen.getByRole('link', { name: '설정' })).toHaveAttribute('href', '/settings')
+})
+
 test('feed shows lifecycle hierarchy and records useful feedback', async () => {
   installApi()
   window.history.pushState({}, '', '/feed')

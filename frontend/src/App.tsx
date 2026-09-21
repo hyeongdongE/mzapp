@@ -1,9 +1,11 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Bookmark, Compass, Home, Settings as SettingsIcon } from 'lucide-react'
 
 import { api } from './api'
 import Onboarding from './pages/Onboarding'
 import Feed from './pages/Feed'
+import Explore from './pages/Explore'
 import Saved from './pages/Saved'
 import Settings from './pages/Settings'
 import TrendDetail from './pages/TrendDetail'
@@ -31,11 +33,20 @@ function RootRedirect() {
 function BottomNav() {
   const location = useLocation()
   if (location.pathname === '/onboarding') return null
+  const items = [
+    { to: '/feed', label: '홈', icon: Home },
+    { to: '/explore', label: '둘러보기', icon: Compass },
+    { to: '/saved', label: '저장', icon: Bookmark },
+    { to: '/settings', label: '설정', icon: SettingsIcon },
+  ]
   return (
     <nav className="bottom-nav" aria-label="주요 메뉴">
-      <Link className={location.pathname.startsWith('/feed') ? 'active' : ''} to="/feed">피드</Link>
-      <Link className={location.pathname.startsWith('/saved') ? 'active' : ''} to="/saved">저장</Link>
-      <Link className={location.pathname.startsWith('/settings') ? 'active' : ''} to="/settings">설정</Link>
+      {items.map(({ to, label, icon: Icon }) => (
+        <Link className={location.pathname.startsWith(to) ? 'active' : ''} key={to} to={to}>
+          <Icon aria-hidden="true" size={20} strokeWidth={2.1} />
+          <span>{label}</span>
+        </Link>
+      ))}
     </nav>
   )
 }
@@ -73,6 +84,7 @@ function Shell() {
         <Route path="/" element={<RootRedirect />} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/feed" element={<Feed />} />
+        <Route path="/explore" element={<Explore />} />
         <Route path="/trends/:id" element={<TrendDetail />} />
         <Route path="/saved" element={<Saved />} />
         <Route path="/settings" element={<Settings />} />

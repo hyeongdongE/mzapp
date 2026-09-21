@@ -1,10 +1,10 @@
 {
-  "name": "Personal Trend Radar",
-  "short_name": "Trend Radar",
+  "name": "MZ Radar",
+  "short_name": "MZ Radar",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f4f1e8",
-  "theme_color": "#f4f1e8",
+  "background_color": "#F7F7FA",
+  "theme_color": "#F7F7FA",
   "lang": "ko",
   "icons": []
 }
