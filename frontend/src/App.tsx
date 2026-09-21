@@ -3,6 +3,10 @@ import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react
 
 import { api } from './api'
 import Onboarding from './pages/Onboarding'
+import Feed from './pages/Feed'
+import Saved from './pages/Saved'
+import Settings from './pages/Settings'
+import TrendDetail from './pages/TrendDetail'
 import type { CategoriesResponse, Category } from './types'
 
 interface AppContextValue {
@@ -17,10 +21,6 @@ export function useAppState(): AppContextValue {
   const state = useContext(AppContext)
   if (!state) throw new Error('App state is unavailable')
   return state
-}
-
-function Placeholder({ title }: { title: string }) {
-  return <main className="page"><h1>{title}</h1><p>화면을 준비하고 있습니다.</p></main>
 }
 
 function RootRedirect() {
@@ -72,10 +72,10 @@ function Shell() {
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/onboarding" element={<Onboarding />} />
-        <Route path="/feed" element={<Placeholder title="나의 트렌드" />} />
-        <Route path="/trends/:id" element={<Placeholder title="트렌드 상세" />} />
-        <Route path="/saved" element={<Placeholder title="저장한 트렌드" />} />
-        <Route path="/settings" element={<Placeholder title="설정" />} />
+        <Route path="/feed" element={<Feed />} />
+        <Route path="/trends/:id" element={<TrendDetail />} />
+        <Route path="/saved" element={<Saved />} />
+        <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate replace to="/" />} />
       </Routes>
       <BottomNav />
