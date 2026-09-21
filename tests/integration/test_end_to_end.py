@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
+from app.collectors.geeknews import GeekNewsAtomCollector
 from app.collectors.google_trends import GoogleTrendsRssCollector
 from app.collectors.http import SafeHttpClient
 from app.collectors.wikidata import WikidataLookup, WikidataMatch
@@ -46,6 +47,7 @@ async def exercise_end_to_end(session: Session) -> str:
     bodies = {
         "trends.google.com": (FIXTURES / "google_trends_rss.xml").read_bytes(),
         "wikimedia.org": (FIXTURES / "wikimedia_top_kr.json").read_bytes(),
+        "news.hada.io": (FIXTURES / "geeknews_atom.xml").read_bytes(),
     }
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -54,7 +56,7 @@ async def exercise_end_to_end(session: Session) -> str:
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         safe_http = SafeHttpClient(
             client,
-            allowed_hosts={"trends.google.com", "wikimedia.org"},
+            allowed_hosts={"trends.google.com", "wikimedia.org", "news.hada.io"},
             max_bytes=2_000_000,
             retries=0,
         )
@@ -69,8 +71,14 @@ async def exercise_end_to_end(session: Session) -> str:
             now=lambda: AS_OF,
             target_date=AS_OF.date().replace(day=18),
         ).collect(AS_OF)
+        geeknews = await GeekNewsAtomCollector(
+            safe_http,
+            "https://news.hada.io/rss/news",
+            now=lambda: AS_OF,
+        ).collect(AS_OF)
     CollectionService(session).persist(google, run_key="e2e-google")
     CollectionService(session).persist(wikimedia, run_key="e2e-wikimedia")
+    CollectionService(session).persist(geeknews, run_key="e2e-geeknews")
     run = await PipelineService(
         session,
         FakeWikidata(),
