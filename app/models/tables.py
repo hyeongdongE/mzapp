@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -26,8 +27,13 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from app.models.enums import (
     CandidateStatus,
     Category,
+    CategoryAvailability,
+    DataMode,
     EvidenceStatus,
+    FeedbackType,
     HumanEvaluationLabel,
+    NotificationMode,
+    ProductEventType,
     ResolutionStatus,
     ReviewAction,
     ReviewStatus,
@@ -387,6 +393,10 @@ class Review(Base):
     actor: Mapped[str] = mapped_column(String(160), nullable=False)
     reason: Mapped[str | None] = mapped_column(Text)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    previous_status: Mapped[ReviewStatus | None] = mapped_column(enum_column(ReviewStatus))
+    resulting_status: Mapped[ReviewStatus | None] = mapped_column(enum_column(ReviewStatus))
+    auto_pipeline_result: Mapped[bool | None] = mapped_column(Boolean)
+    human_override_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
@@ -415,3 +425,144 @@ class CostRecord(Base):
     currency: Mapped[str] = mapped_column(String(8), nullable=False, default="USD")
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CategorySetting(Base):
+    __tablename__ = "category_settings"
+
+    category: Mapped[Category] = mapped_column(enum_column(Category), primary_key=True)
+    status: Mapped[CategoryAvailability] = mapped_column(
+        enum_column(CategoryAvailability), nullable=False
+    )
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_by: Mapped[str] = mapped_column(String(160), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ProductTrendCard(Base):
+    __tablename__ = "product_trend_cards"
+    __table_args__ = (
+        UniqueConstraint("snapshot_id", name="uq_product_card_snapshot"),
+        UniqueConstraint("data_mode", "fixture_key", name="uq_product_card_fixture"),
+        CheckConstraint(
+            "(data_mode = 'LIVE' AND entity_id IS NOT NULL AND snapshot_id IS NOT NULL "
+            "AND pipeline_run_id IS NOT NULL AND fixture_key IS NULL) OR "
+            "(data_mode <> 'LIVE' AND fixture_key IS NOT NULL)",
+            name="ck_product_card_mode_provenance",
+        ),
+        Index("ix_product_card_mode_category_time", "data_mode", "category", "observed_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    public_id: Mapped[str] = mapped_column(String(36), unique=True, nullable=False, index=True)
+    data_mode: Mapped[DataMode] = mapped_column(enum_column(DataMode), nullable=False)
+    fixture_key: Mapped[str | None] = mapped_column(String(160))
+    entity_id: Mapped[int | None] = mapped_column(ForeignKey("trend_entities.id"))
+    snapshot_id: Mapped[int | None] = mapped_column(ForeignKey("trend_snapshots.id"))
+    pipeline_run_id: Mapped[int | None] = mapped_column(ForeignKey("pipeline_runs.id"))
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    category: Mapped[Category] = mapped_column(enum_column(Category), nullable=False)
+    lifecycle: Mapped[TrendLifecycle] = mapped_column(
+        enum_column(TrendLifecycle), nullable=False
+    )
+    what_text: Mapped[str] = mapped_column(Text, nullable=False)
+    interest_text: Mapped[str] = mapped_column(Text, nullable=False)
+    cause_text: Mapped[str | None] = mapped_column(Text)
+    sources: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    trend_score: Mapped[float] = mapped_column(Float, nullable=False)
+    auto_pipeline_result: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    suppressed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class AnonymousUser(Base):
+    __tablename__ = "anonymous_users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    credential_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class UserInterest(Base):
+    __tablename__ = "user_interests"
+    __table_args__ = (
+        UniqueConstraint("user_id", "category", name="uq_user_interest"),
+        CheckConstraint("category <> 'OTHER'", name="ck_user_interest_not_other"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("anonymous_users.id"), nullable=False)
+    category: Mapped[Category] = mapped_column(enum_column(Category), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NotificationPreference(Base):
+    __tablename__ = "notification_preferences"
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("anonymous_users.id"), primary_key=True
+    )
+    mode: Mapped[NotificationMode] = mapped_column(
+        enum_column(NotificationMode), nullable=False, default=NotificationMode.OFF
+    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class TrendInteraction(Base):
+    __tablename__ = "trend_interactions"
+    __table_args__ = (UniqueConstraint("user_id", "card_id", name="uq_trend_interaction"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("anonymous_users.id"), nullable=False)
+    card_id: Mapped[int] = mapped_column(ForeignKey("product_trend_cards.id"), nullable=False)
+    first_impression_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_impression_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    impression_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    open_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class TrendFeedback(Base):
+    __tablename__ = "trend_feedback"
+    __table_args__ = (UniqueConstraint("user_id", "card_id", name="uq_trend_feedback"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("anonymous_users.id"), nullable=False)
+    card_id: Mapped[int] = mapped_column(ForeignKey("product_trend_cards.id"), nullable=False)
+    feedback_type: Mapped[FeedbackType] = mapped_column(
+        enum_column(FeedbackType), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SavedTrend(Base):
+    __tablename__ = "saved_trends"
+    __table_args__ = (UniqueConstraint("user_id", "card_id", name="uq_saved_trend"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("anonymous_users.id"), nullable=False)
+    card_id: Mapped[int] = mapped_column(ForeignKey("product_trend_cards.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ProductEvent(Base):
+    __tablename__ = "product_events"
+    __table_args__ = (Index("ix_product_event_mode_time", "data_mode", "occurred_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("anonymous_users.id"), nullable=False)
+    event_type: Mapped[ProductEventType] = mapped_column(
+        enum_column(ProductEventType), nullable=False
+    )
+    card_id: Mapped[int | None] = mapped_column(ForeignKey("product_trend_cards.id"))
+    category: Mapped[Category | None] = mapped_column(enum_column(Category))
+    data_mode: Mapped[DataMode] = mapped_column(enum_column(DataMode), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

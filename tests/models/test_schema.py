@@ -5,7 +5,16 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app.models.enums import RunStatus, Source
+from app.models.enums import (
+    CategoryAvailability,
+    DataMode,
+    FeedbackType,
+    NotificationMode,
+    ProductEventType,
+    PublicationPolicyMode,
+    RunStatus,
+    Source,
+)
 from app.models.tables import Base, CollectionRun, RawPayload, SourceObservation
 
 UTC_NOW = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
@@ -101,6 +110,63 @@ def test_schema_contains_replayable_pipeline_tables() -> None:
     }
 
     assert expected <= set(Base.metadata.tables)
+
+
+def test_schema_contains_isolated_user_mvp_tables() -> None:
+    expected = {
+        "category_settings",
+        "product_trend_cards",
+        "anonymous_users",
+        "user_interests",
+        "notification_preferences",
+        "trend_interactions",
+        "trend_feedback",
+        "saved_trends",
+        "product_events",
+    }
+
+    assert expected <= set(Base.metadata.tables)
+
+
+def test_user_mvp_enums_have_stable_operational_values() -> None:
+    assert [item.value for item in DataMode] == ["LIVE", "DEMO", "TEST"]
+    assert [item.value for item in CategoryAvailability] == [
+        "ENABLED",
+        "EXPERIMENTAL",
+        "DISABLED",
+    ]
+    assert [item.value for item in PublicationPolicyMode] == [
+        "MANUAL_APPROVAL_REQUIRED",
+        "AUTO_PUBLISH_ELIGIBLE",
+        "AUTO_PUBLISH",
+    ]
+    assert {item.value for item in FeedbackType} == {
+        "NEW_AND_USEFUL",
+        "ALREADY_KNEW",
+        "NOT_INTERESTED",
+        "INCORRECT",
+    }
+    assert {item.value for item in NotificationMode} == {
+        "OFF",
+        "DAILY_DIGEST",
+        "IMPORTANT_RISING",
+    }
+    assert "FEEDBACK_INCORRECT" in {item.value for item in ProductEventType}
+
+
+def test_user_records_are_tenant_scoped_and_mode_tagged() -> None:
+    tables = Base.metadata.tables
+    assert {"credential_hash", "created_at", "last_seen_at"} <= set(
+        tables["anonymous_users"].columns.keys()
+    )
+    assert {"user_id", "card_id", "feedback_type"} <= set(
+        tables["trend_feedback"].columns.keys()
+    )
+    assert "data_mode" in tables["product_trend_cards"].columns
+    assert "data_mode" in tables["product_events"].columns
+    assert {"previous_status", "resulting_status", "auto_pipeline_result"} <= set(
+        tables["reviews"].columns.keys()
+    )
 
 
 def test_derived_records_preserve_algorithm_versions() -> None:
