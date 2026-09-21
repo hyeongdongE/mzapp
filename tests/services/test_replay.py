@@ -58,6 +58,29 @@ def test_replay_reparses_geeknews_raw_payload() -> None:
     assert items[0].source_url == "https://news.hada.io/topic?id=34041"
 
 
+def test_replay_preserves_geeknews_parser_version_semantics() -> None:
+    raw = b'''<feed xmlns="http://www.w3.org/2005/Atom"><entry>
+    <title><![CDATA[Claude &quot;Code&quot;]]></title>
+    <id>https://news.hada.io/topic?id=parser-version</id>
+    <published>2026-09-21T09:00:00+09:00</published>
+    </entry></feed>'''
+    v1 = SimpleNamespace(
+        collected_at=T0,
+        parser_version="geeknews-atom-parser-v1",
+        request_url="https://news.hada.io/rss/news",
+    )
+    v2 = SimpleNamespace(
+        collected_at=T0,
+        parser_version="geeknews-atom-parser-v2",
+        request_url="https://news.hada.io/rss/news",
+    )
+
+    assert _parse_payload(Source.GEEKNEWS, raw, v1)[0].canonical_text == (
+        "Claude &quot;Code&quot;"
+    )
+    assert _parse_payload(Source.GEEKNEWS, raw, v2)[0].canonical_text == 'Claude "Code"'
+
+
 def seed_historical_projection(session: Session) -> tuple[TrendCandidate, TrendEntity]:
     raw_bytes = b"""<?xml version="1.0"?>
 <rss xmlns:ht="https://trends.google.com/trending/rss"><channel><item>

@@ -113,7 +113,9 @@ class CollectionService:
             raise ValueError("collection run key cannot be reused for a different payload")
 
         existing = (
-            self._repo.existing_source_item_ids_for_source(batch.source)
+            self._repo.existing_source_item_ids_for_source(
+                batch.source, batch.parser_version
+            )
             if batch.source is Source.GEEKNEWS
             else self._repo.existing_source_item_ids(run.id)
         )

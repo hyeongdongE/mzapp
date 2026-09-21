@@ -77,11 +77,16 @@ class CollectionRepository:
             )
         )
 
-    def existing_source_item_ids_for_source(self, source: Source) -> set[str]:
+    def existing_source_item_ids_for_source(
+        self, source: Source, parser_version: str
+    ) -> set[str]:
         return set(
             self.session.scalars(
-                select(SourceObservation.source_item_id).where(
-                    SourceObservation.source == source
+                select(SourceObservation.source_item_id)
+                .join(RawFetch, RawFetch.run_id == SourceObservation.run_id)
+                .where(
+                    SourceObservation.source == source,
+                    RawFetch.parser_version == parser_version,
                 )
             )
         )

@@ -328,7 +328,14 @@ def _parse_payload(source: Source, raw_bytes: bytes, raw_fetch: RawFetch) -> lis
             )
         return parse_wikimedia_top_pages(raw_bytes, observed_at, raw_fetch.request_url)
     if source is Source.GEEKNEWS:
-        if raw_fetch.parser_version != "geeknews-atom-parser-v1":
+        if raw_fetch.parser_version == "geeknews-atom-parser-v1":
+            return parse_geeknews_atom(
+                raw_bytes,
+                observed_at,
+                raw_fetch.request_url,
+                decode_html_entities=False,
+            )
+        if raw_fetch.parser_version != "geeknews-atom-parser-v2":
             raise InvalidRawPayload(
                 f"unsupported GeekNews parser version {raw_fetch.parser_version}"
             )

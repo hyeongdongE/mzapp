@@ -69,6 +69,19 @@ async def test_geeknews_empty_feed_returns_empty_batch() -> None:
 
 
 @pytest.mark.asyncio
+async def test_geeknews_decodes_html_entities_inside_cdata_title() -> None:
+    body = b'''<feed xmlns="http://www.w3.org/2005/Atom"><entry>
+    <title><![CDATA[Claude Code: &quot;I am often wrong&quot;]]></title>
+    <id>https://news.hada.io/topic?id=entity-title</id>
+    <published>2026-09-21T09:00:00+09:00</published>
+    </entry></feed>'''
+
+    batch = await GeekNewsAtomCollector(http_client(body), FEED_URL).collect(AS_OF)
+
+    assert batch.items[0].canonical_text == 'Claude Code: "I am often wrong"'
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "body",
     [

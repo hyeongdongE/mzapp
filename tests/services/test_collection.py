@@ -104,6 +104,55 @@ def test_geeknews_item_repeated_in_new_feed_snapshot_is_not_duplicated(db_sessio
     assert count(db_session, SourceObservation) == 1
 
 
+def test_geeknews_parser_upgrade_can_emit_corrected_observation_once(db_session) -> None:
+    original = batch()
+    v1 = CollectionBatch(
+        source=Source.GEEKNEWS,
+        collected_at=original.collected_at,
+        request_url="https://news.hada.io/rss/news",
+        raw_bytes=b"<feed>same bytes</feed>",
+        items=[
+            SourceItem(
+                source_item_id="geeknews:item:versioned",
+                source_timestamp=AS_OF,
+                observed_at=AS_OF,
+                canonical_text="Claude &quot;Code&quot;",
+                source_url="https://news.hada.io/topic?id=versioned",
+                metrics={"entry_id": "versioned"},
+            )
+        ],
+        collector_version="geeknews-atom-v1",
+        parser_version="geeknews-atom-parser-v1",
+    )
+    v2 = CollectionBatch(
+        source=v1.source,
+        collected_at=v1.collected_at,
+        request_url=v1.request_url,
+        raw_bytes=v1.raw_bytes,
+        items=[
+            SourceItem(
+                source_item_id="geeknews:item:versioned",
+                source_timestamp=AS_OF,
+                observed_at=AS_OF,
+                canonical_text='Claude "Code"',
+                source_url="https://news.hada.io/topic?id=versioned",
+                metrics={"entry_id": "versioned"},
+            )
+        ],
+        collector_version="geeknews-atom-v1",
+        parser_version="geeknews-atom-parser-v2",
+    )
+
+    first = CollectionService(db_session).persist(v1, run_key="geeknews:parser-v1")
+    upgraded = CollectionService(db_session).persist(v2, run_key="geeknews:parser-v2")
+    repeated = CollectionService(db_session).persist(v2, run_key="geeknews:parser-v2-repeat")
+
+    assert first.inserted_observations == 1
+    assert upgraded.inserted_observations == 1
+    assert repeated.inserted_observations == 0
+    assert count(db_session, SourceObservation) == 2
+
+
 def test_raw_payload_preserves_exact_bytes_for_replay(db_session) -> None:
     CollectionService(db_session).persist(batch(), run_key="google:20260920T1000")
 

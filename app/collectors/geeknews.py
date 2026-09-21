@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 from collections.abc import Callable
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
@@ -20,7 +21,7 @@ OFFICIAL_HOST = "news.hada.io"
 class GeekNewsAtomCollector:
     source = Source.GEEKNEWS
     collector_version = "geeknews-atom-v1"
-    parser_version = "geeknews-atom-parser-v1"
+    parser_version = "geeknews-atom-parser-v2"
 
     def __init__(
         self,
@@ -49,7 +50,11 @@ class GeekNewsAtomCollector:
 
 
 def parse_geeknews_atom(
-    raw_bytes: bytes, observed_at: datetime, fallback_url: str
+    raw_bytes: bytes,
+    observed_at: datetime,
+    fallback_url: str,
+    *,
+    decode_html_entities: bool = True,
 ) -> list[SourceItem]:
     """Parse a stored official GeekNews Atom payload without network I/O."""
     try:
@@ -63,6 +68,8 @@ def parse_geeknews_atom(
     seen: set[str] = set()
     for entry in root.findall(f"{ATOM}entry"):
         title = (entry.findtext(f"{ATOM}title") or "").strip()
+        if decode_html_entities:
+            title = html.unescape(title)
         entry_id = (entry.findtext(f"{ATOM}id") or "").strip()
         published_raw = (entry.findtext(f"{ATOM}published") or "").strip()
         if not title or not entry_id or not published_raw:
