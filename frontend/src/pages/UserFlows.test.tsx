@@ -78,9 +78,10 @@ test('feed shows lifecycle hierarchy and records useful feedback', async () => {
 
   expect(await screen.findByText('피스타치오 디저트')).toBeInTheDocument()
   expect(screen.getByText('관심 상승 중')).toBeInTheDocument()
-  await userEvent.click(screen.getByRole('button', { name: '처음 알았음' }))
+  expect(screen.getByRole('button', { name: '전체' })).toHaveAttribute('aria-pressed', 'true')
+  await userEvent.click(screen.getByRole('button', { name: '처음 봤어요 ✨' }))
 
-  await waitFor(() => expect(screen.getByRole('button', { name: '처음 알았음' })).toHaveAttribute('aria-pressed', 'true'))
+  await waitFor(() => expect(screen.getByRole('button', { name: '처음 봤어요 ✨' })).toHaveAttribute('aria-pressed', 'true'))
 })
 
 test('feed preserves an honest empty state', async () => {
@@ -88,7 +89,7 @@ test('feed preserves an honest empty state', async () => {
   window.history.pushState({}, '', '/feed')
   render(<App />)
 
-  expect(await screen.findByText('오늘은 아직 새로운 변화가 없습니다.')).toBeInTheDocument()
+  expect(await screen.findByText('아직 새로운 흐름이 없어요')).toBeInTheDocument()
 })
 
 test('detail presents supported explanation, unknown cause, and attribution', async () => {

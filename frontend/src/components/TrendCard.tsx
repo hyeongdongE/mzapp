@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Bookmark, BookmarkCheck } from 'lucide-react'
 
 import { api } from '../api'
 import type { TrendItem } from '../types'
@@ -21,6 +22,8 @@ function freshness(value: string) {
 
 export default function TrendCard({ item, compact = false }: { item: TrendItem; compact?: boolean }) {
   const [saved, setSaved] = useState(item.saved)
+  const [saveBusy, setSaveBusy] = useState(false)
+  const [notice, setNotice] = useState('')
   const observed = useRef(false)
   const root = useRef<HTMLElement>(null)
 
@@ -42,17 +45,24 @@ export default function TrendCard({ item, compact = false }: { item: TrendItem; 
   }, [item.trendId])
 
   async function toggleSave() {
-    if (saved) await api.unsave(item.trendId)
-    else await api.save(item.trendId)
-    setSaved(!saved)
+    setSaveBusy(true)
+    try {
+      if (saved) await api.unsave(item.trendId)
+      else await api.save(item.trendId)
+      setSaved(!saved)
+      setNotice(saved ? '저장을 취소했어요' : '저장했어요')
+    } finally {
+      setSaveBusy(false)
+    }
   }
 
   return (
-    <article className="trend-card" ref={root}>
+    <article className={`trend-card${compact ? ' trend-card-compact' : ''}`} data-category={item.category} ref={root}>
+      <span className="card-glow" aria-hidden="true" />
       <div className="card-topline">
         <LifecycleBadge lifecycle={item.lifecycle} />
-        <button className="save-button" aria-pressed={saved} onClick={() => void toggleSave()}>
-          {saved ? '저장됨' : '저장'}
+        <button className="save-button" aria-label={saved ? '저장 취소' : '저장'} aria-pressed={saved} disabled={saveBusy} onClick={() => void toggleSave()}>
+          {saved ? <BookmarkCheck aria-hidden="true" size={20} /> : <Bookmark aria-hidden="true" size={20} />}
         </button>
       </div>
       <Link className="card-link" to={`/trends/${item.trendId}`}>
@@ -64,6 +74,7 @@ export default function TrendCard({ item, compact = false }: { item: TrendItem; 
         <time dateTime={item.observedAt}>{freshness(item.observedAt)}</time>
       </div>
       {!compact && <FeedbackBar trendId={item.trendId} initial={item.feedback} />}
+      <span className="sr-only" aria-live="polite">{notice}</span>
     </article>
   )
 }

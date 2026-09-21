@@ -39,9 +39,10 @@ beforeEach(() => {
 
 test('labels demo data and requires at least one interest', async () => {
   render(<App />)
-  const continueButton = await screen.findByRole('button', { name: '내 레이더 시작하기' })
+  const continueButton = await screen.findByRole('button', { name: '계속하기' })
 
   expect(screen.getByText(/DEMO DATA/)).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: /요즘 뜨는 것만/ })).toBeInTheDocument()
   expect(continueButton).toBeDisabled()
 
   await userEvent.click(screen.getByRole('checkbox', { name: 'AI / IT' }))
@@ -52,7 +53,7 @@ test('submits interests and navigates to the feed', async () => {
   render(<App />)
 
   await userEvent.click(await screen.findByRole('checkbox', { name: 'AI / IT' }))
-  await userEvent.click(screen.getByRole('button', { name: '내 레이더 시작하기' }))
+  await userEvent.click(screen.getByRole('button', { name: '계속하기' }))
 
   await waitFor(() => expect(window.location.pathname).toBe('/feed'))
 })

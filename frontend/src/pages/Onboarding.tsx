@@ -1,9 +1,22 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Check, Clapperboard, Gamepad2, Shirt, ShoppingBag, Sparkles, Trophy, Utensils } from 'lucide-react'
 
 import { api } from '../api'
 import { useAppState } from '../App'
+import BrandMark from '../components/BrandMark'
 import type { Category } from '../types'
+
+const categoryIcons = {
+  SPORTS: Trophy,
+  ENTERTAINMENT: Clapperboard,
+  FOOD: Utensils,
+  GAME: Gamepad2,
+  AI_TECH: Sparkles,
+  MEME_INTERNET: Sparkles,
+  FASHION_BEAUTY: Shirt,
+  SHOPPING_PRODUCT: ShoppingBag,
+} satisfies Record<Category, typeof Sparkles>
 
 export default function Onboarding() {
   const { catalog, interests, setInterests } = useAppState()
@@ -37,24 +50,30 @@ export default function Onboarding() {
 
   return (
     <main className="onboarding page">
-      <p className="eyebrow">PERSONAL TREND RADAR</p>
-      <h1>어떤 변화가<br />궁금하세요?</h1>
-      <p className="lede">관심 분야를 고르면 새롭게 떠오르는 흐름만 짧고 근거 있게 보여드려요.</p>
+      <div className="brand-lockup"><BrandMark size={38} /><span>MZ RADAR</span></div>
+      <header className="onboarding-header">
+        <h1>요즘 뜨는 것만,<br /><span>네 취향대로.</span></h1>
+        <p className="lede">관심 있는 분야를 고르면<br />새로운 흐름만 골라드릴게요.</p>
+      </header>
       {catalog.items.length ? (
         <fieldset className="interest-grid">
           <legend className="sr-only">관심 분야</legend>
-          {catalog.items.map((item) => (
-            <label className="interest-choice" key={item.category}>
+          {catalog.items.map((item) => {
+            const Icon = categoryIcons[item.category]
+            const checked = selected.includes(item.category)
+            return (
+            <label className="interest-choice" data-category={item.category} key={item.category}>
               <input
                 aria-label={item.label}
-                checked={selected.includes(item.category)}
+                checked={checked}
                 onChange={() => toggle(item.category)}
                 type="checkbox"
               />
-              <span>{item.label}</span>
-              {item.status === 'EXPERIMENTAL' && <small>실험 중</small>}
+              <span className="interest-icon"><Icon aria-hidden="true" size={22} /></span>
+              <span className="interest-label">{item.label}</span>
+              <Check aria-hidden="true" className="interest-check" size={18} />
             </label>
-          ))}
+          )})}
         </fieldset>
       ) : (
         <section className="empty-panel">
@@ -65,7 +84,7 @@ export default function Onboarding() {
       <p className="selection-hint">최소 1개 · 3~5개를 추천해요</p>
       {error && <p className="error" role="alert">{error}</p>}
       <button className="primary wide" disabled={!selected.length || saving} onClick={submit}>
-        {saving ? '저장 중…' : '내 레이더 시작하기'}
+        {saving ? '저장 중…' : '계속하기'}
       </button>
     </main>
   )
