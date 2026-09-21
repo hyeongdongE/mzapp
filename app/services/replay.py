@@ -95,7 +95,7 @@ class ReplayService:
         score_version: str,
         normalizer_version: str = "normalizer-v1",
         entity_version: str = "entity-v1",
-        classifier_version: str = "classifier-v1",
+        classifier_version: str = "classifier-v2",
         prompt_version: str = "prompt-v1",
         dry_run: bool = False,
     ) -> ReplayResult:

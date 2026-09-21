@@ -9,13 +9,14 @@ from sqlalchemy.orm import Session
 from app.models.enums import Category
 from app.models.tables import EntityClassification, TrendEntity
 
-CLASSIFIER_VERSION = "classifier-v1"
+CLASSIFIER_VERSION = "classifier-v2"
 
 INSTANCE_RULES = {
     "Q349": Category.SPORTS,
     "Q11424": Category.ENTERTAINMENT,
     "Q7889": Category.GAME,
     "Q2095": Category.FOOD,
+    "Q3220391": Category.AI_TECH,
 }
 
 DESCRIPTION_RULES = (

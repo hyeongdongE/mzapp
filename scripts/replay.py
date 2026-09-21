@@ -27,7 +27,7 @@ def main() -> None:
     parser.add_argument("--score-version", required=True)
     parser.add_argument("--normalizer-version", default="normalizer-v1")
     parser.add_argument("--entity-version", default="entity-v1")
-    parser.add_argument("--classifier-version", default="classifier-v1")
+    parser.add_argument("--classifier-version", default="classifier-v2")
     parser.add_argument("--prompt-version", default="prompt-v1")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()

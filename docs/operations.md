@@ -56,7 +56,7 @@ uv run python scripts/replay.py `
   --to 2026-09-20 `
   --normalizer-version normalizer-v1 `
   --entity-version entity-v1 `
-  --classifier-version classifier-v1 `
+  --classifier-version classifier-v2 `
   --score-version score-v2 `
   --prompt-version prompt-v1 `
   --dry-run

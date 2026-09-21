@@ -47,6 +47,46 @@ def test_unknown_classification_falls_back_to_other_for_review():
     assert result.reason == "NO_MATCH_NEEDS_REVIEW"
 
 
+def test_social_network_service_instance_is_ai_tech():
+    value = entity("소셜 네트워크 서비스")
+    value.entity_types = ["Q3220391"]
+
+    result = EntityClassifier().classify(value)
+
+    assert result.category is Category.AI_TECH
+    assert result.confidence == 1.0
+    assert result.reason == "INSTANCE_OF:Q3220391"
+
+
+@pytest.mark.parametrize(
+    "entity_type",
+    [
+        "Q5",  # human
+        "Q11032",  # newspaper
+        "Q4830453",  # business
+        "Q2424752",  # product
+    ],
+)
+def test_broad_unmapped_instance_types_do_not_guess_a_category(entity_type):
+    value = entity("")
+    value.entity_types = [entity_type]
+
+    result = EntityClassifier().classify(value)
+
+    assert result.category is Category.OTHER
+    assert result.reason == "NO_MATCH_NEEDS_REVIEW"
+
+
+def test_social_network_service_conflicting_with_entertainment_requires_review():
+    value = entity("")
+    value.entity_types = ["Q3220391", "Q11424"]
+
+    result = EntityClassifier().classify(value)
+
+    assert result.category is Category.OTHER
+    assert result.reason == "CONFLICTING_RULES_NEEDS_REVIEW:AI_TECH,ENTERTAINMENT"
+
+
 @pytest.mark.parametrize("description", ["가수분해 효소", "선수금 회계 항목"])
 def test_korean_tokens_do_not_match_inside_unrelated_compound_words(description):
     result = EntityClassifier().classify(entity(description))

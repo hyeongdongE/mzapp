@@ -34,7 +34,7 @@ from app.services.collection import CollectionService
 class PipelineVersions:
     normalizer: str = "normalizer-v1"
     entity: str = "entity-v1"
-    classifier: str = "classifier-v1"
+    classifier: str = "classifier-v2"
     score: str = "score-v1"
     prompt: str = "prompt-v1"
 
