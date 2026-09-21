@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     google_trends_rss_url: HttpUrl = HttpUrl("https://trends.google.com/trending/rss?geo=KR")
     wikimedia_api_url: HttpUrl = HttpUrl("https://wikimedia.org/api/rest_v1")
     wikidata_api_url: HttpUrl = HttpUrl("https://www.wikidata.org/w/api.php")
+    geeknews_rss_url: HttpUrl = HttpUrl("https://news.hada.io/rss/news")
     http_timeout_seconds: float = 10.0
     http_max_bytes: int = 2_000_000
     http_retries: int = 3
@@ -56,6 +57,11 @@ class Settings(BaseSettings):
     @classmethod
     def validate_wikidata_endpoint(cls, value: HttpUrl) -> HttpUrl:
         return cls._validate_official_https(value, {"www.wikidata.org", "wikidata.org"})
+
+    @field_validator("geeknews_rss_url")
+    @classmethod
+    def validate_geeknews_endpoint(cls, value: HttpUrl) -> HttpUrl:
+        return cls._validate_official_https(value, {"news.hada.io"})
 
     @staticmethod
     def _validate_official_https(value: HttpUrl, allowed_hosts: set[str]) -> HttpUrl:

@@ -5,6 +5,7 @@ class Source(StrEnum):
     GOOGLE_TRENDS = "GOOGLE_TRENDS"
     WIKIMEDIA = "WIKIMEDIA"
     WIKIDATA = "WIKIDATA"
+    GEEKNEWS = "GEEKNEWS"
 
 
 class RunStatus(StrEnum):

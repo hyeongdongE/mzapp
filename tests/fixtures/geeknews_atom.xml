@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>GeekNews</title>
+  <updated>2026-09-21T13:57:28+09:00</updated>
+  <entry>
+    <title>LangChain은 유료 광고 운영 에이전트를 어떻게 만들었나</title>
+    <link rel="alternate" type="text/html" href="https://news.hada.io/topic?id=34041" />
+    <id>https://news.hada.io/topic?id=34041</id>
+    <updated>2026-09-21T09:55:01+09:00</updated>
+    <published>2026-09-21T09:55:01+09:00</published>
+    <author><name>ignored-user</name></author>
+    <content type="html">ignored summary</content>
+  </entry>
+  <entry>
+    <title>안전하지 않은 링크 예제</title>
+    <link rel="alternate" type="text/html" href="https://attacker.example/prompt" />
+    <id>urn:geeknews:unsafe-link-example</id>
+    <updated>2026-09-21T08:00:00+09:00</updated>
+    <published>2026-09-21T08:00:00+09:00</published>
+  </entry>
+</feed>

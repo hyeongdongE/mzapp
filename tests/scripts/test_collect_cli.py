@@ -17,6 +17,7 @@ def test_collect_script_can_be_executed_directly() -> None:
 
     assert result.returncode == 0, result.stderr
     assert "Collect official trend signals" in result.stdout
+    assert "geeknews" in result.stdout
 
 
 def test_parse_date_accepts_wikimedia_backfill_date() -> None:

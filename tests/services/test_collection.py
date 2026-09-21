@@ -63,6 +63,47 @@ def test_same_run_retry_does_not_duplicate_observations(db_session) -> None:
     assert second.inserted_observations == 0
 
 
+def test_geeknews_item_repeated_in_new_feed_snapshot_is_not_duplicated(db_session) -> None:
+    value = batch()
+    geeknews = CollectionBatch(
+        source=Source.GEEKNEWS,
+        collected_at=value.collected_at,
+        request_url="https://news.hada.io/rss/news",
+        raw_bytes=b"<feed>snapshot one</feed>",
+        items=[
+            SourceItem(
+                source_item_id="geeknews:item:34041",
+                source_timestamp=AS_OF,
+                observed_at=AS_OF,
+                canonical_text="LangChain agent",
+                source_url="https://news.hada.io/topic?id=34041",
+                metrics={"entry_id": "https://news.hada.io/topic?id=34041"},
+            )
+        ],
+        collector_version="geeknews-atom-v1",
+        parser_version="geeknews-atom-parser-v1",
+    )
+
+    first = CollectionService(db_session).persist(geeknews, run_key="geeknews:first")
+    second = CollectionService(db_session).persist(
+        CollectionBatch(
+            source=geeknews.source,
+            collected_at=geeknews.collected_at,
+            request_url=geeknews.request_url,
+            raw_bytes=b"<feed>snapshot two</feed>",
+            items=geeknews.items,
+            collector_version=geeknews.collector_version,
+            parser_version=geeknews.parser_version,
+        ),
+        run_key="geeknews:second",
+    )
+
+    assert first.inserted_observations == 1
+    assert second.inserted_observations == 0
+    assert count(db_session, RawFetch) == 2
+    assert count(db_session, SourceObservation) == 1
+
+
 def test_raw_payload_preserves_exact_bytes_for_replay(db_session) -> None:
     CollectionService(db_session).persist(batch(), run_key="google:20260920T1000")
 

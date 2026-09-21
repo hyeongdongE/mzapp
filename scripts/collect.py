@@ -7,6 +7,7 @@ from datetime import UTC, date, datetime
 import httpx
 
 from app.collectors.base import CollectorError
+from app.collectors.geeknews import GeekNewsAtomCollector
 from app.collectors.google_trends import GoogleTrendsRssCollector
 from app.collectors.http import SafeHttpClient
 from app.collectors.wikimedia import WikimediaTopPagesCollector
@@ -39,7 +40,12 @@ async def collect(
     async with httpx.AsyncClient() as client:
         safe_http = SafeHttpClient(
             client,
-            allowed_hosts={"trends.google.com", "wikimedia.org", "www.wikidata.org"},
+            allowed_hosts={
+                "trends.google.com",
+                "wikimedia.org",
+                "www.wikidata.org",
+                "news.hada.io",
+            },
             max_bytes=settings.http_max_bytes,
             retries=settings.http_retries,
             timeout_seconds=settings.http_timeout_seconds,
@@ -58,6 +64,8 @@ async def collect(
                     target_date=target_date,
                 )
             )
+        if source in {"geeknews", "all"}:
+            collectors.append(GeekNewsAtomCollector(safe_http, str(settings.geeknews_rss_url)))
         for collector in collectors:
             logical_key = target_date.isoformat() if target_date else f"{as_of:%Y%m%dT%H%M%SZ}"
             run_key = f"{collector.source.value.lower()}:{logical_key}"
@@ -77,7 +85,9 @@ async def collect(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Collect official trend signals")
-    parser.add_argument("--source", choices=("google", "wikimedia", "all"), default="all")
+    parser.add_argument(
+        "--source", choices=("google", "wikimedia", "geeknews", "all"), default="all"
+    )
     parser.add_argument("--as-of")
     parser.add_argument("--date", type=parse_date, help="exact Wikimedia target date (YYYY-MM-DD)")
     args = parser.parse_args()

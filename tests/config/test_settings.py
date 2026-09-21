@@ -33,4 +33,12 @@ def test_settings_use_official_endpoints_by_default() -> None:
     assert settings.google_trends_rss_url.host == "trends.google.com"
     assert settings.wikimedia_api_url.host == "wikimedia.org"
     assert settings.wikidata_api_url.host == "www.wikidata.org"
+    assert settings.geeknews_rss_url.host == "news.hada.io"
     assert settings.dashboard_host == "127.0.0.1"
+
+
+def test_settings_reject_unapproved_geeknews_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEEKNEWS_RSS_URL", "https://example.test/rss")
+
+    with pytest.raises(ValidationError):
+        get_settings()

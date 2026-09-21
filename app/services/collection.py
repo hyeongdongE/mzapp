@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from app.collectors.base import CollectionBatch, Collector, CollectorError
-from app.models.enums import RunStatus
+from app.models.enums import RunStatus, Source
 from app.models.tables import CollectionRun, RawFetch, RawPayload, SourceObservation
 from app.repositories.collection import CollectionRepository
 
@@ -112,7 +112,11 @@ class CollectionService:
         if fetch.raw_payload_id != payload.id:
             raise ValueError("collection run key cannot be reused for a different payload")
 
-        existing = self._repo.existing_source_item_ids(run.id)
+        existing = (
+            self._repo.existing_source_item_ids_for_source(batch.source)
+            if batch.source is Source.GEEKNEWS
+            else self._repo.existing_source_item_ids(run.id)
+        )
         inserted = 0
         for item in batch.items:
             if item.source_item_id in existing:
