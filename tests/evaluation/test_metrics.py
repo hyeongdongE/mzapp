@@ -104,6 +104,19 @@ def test_cross_source_and_freshness_use_explicit_denominators() -> None:
     assert timing.approval_p95_minutes == Decimal("15.00")
 
 
+def test_geeknews_is_a_discovery_source_without_self_confirmation() -> None:
+    result = cross_source(
+        [
+            frozenset({Source.GEEKNEWS}),
+            frozenset({Source.GEEKNEWS, Source.GOOGLE_TRENDS}),
+        ]
+    )
+
+    assert result.eligible_entities == 2
+    assert result.confirmed_entities == 1
+    assert result.rate == Decimal("0.5000")
+
+
 def test_negative_freshness_delay_is_rejected() -> None:
     with pytest.raises(ValueError, match="negative"):
         freshness([FreshnessFact(timedelta(seconds=-1), None)])

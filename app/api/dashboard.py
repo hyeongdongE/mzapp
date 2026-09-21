@@ -31,6 +31,7 @@ SOURCE_NAMES = {
     Source.GOOGLE_TRENDS: "Google Trends",
     Source.WIKIMEDIA: "Wikimedia",
     Source.WIKIDATA: "Wikidata",
+    Source.GEEKNEWS: "GeekNews",
 }
 templates = Jinja2Templates(
     directory=Path(__file__).resolve().parents[2] / "dashboard" / "templates"

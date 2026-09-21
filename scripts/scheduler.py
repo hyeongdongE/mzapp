@@ -39,6 +39,10 @@ def scheduled_actions(
         target_date = (current - timedelta(days=2)).date()
         asyncio.run(collect("wikimedia", current, target_date=target_date))
 
+    def collect_geeknews() -> None:
+        current = clock()
+        asyncio.run(collect("geeknews", current))
+
     def run_pipeline() -> None:
         asyncio.run(build(None, None, None))
 
@@ -58,6 +62,7 @@ def scheduled_actions(
     return SchedulerActions(
         google=collect_google,
         wikimedia=collect_wikimedia,
+        geeknews=collect_geeknews,
         pipeline=run_pipeline,
         daily_evaluation=run_daily_evaluation,
         weekly_evaluation=run_weekly_evaluation,

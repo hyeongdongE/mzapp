@@ -41,7 +41,7 @@ from app.models.tables import (
     TrendSnapshot,
 )
 
-DISCOVERY_SOURCES = (Source.GOOGLE_TRENDS, Source.WIKIMEDIA)
+DISCOVERY_SOURCES = (Source.GOOGLE_TRENDS, Source.WIKIMEDIA, Source.GEEKNEWS)
 VERSION_KEYS = (
     "collector",
     "parser",

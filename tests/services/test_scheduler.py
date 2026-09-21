@@ -13,6 +13,7 @@ def test_scheduler_registers_stable_non_overlapping_jobs_in_seoul_time() -> None
     actions = SchedulerActions(
         google=lambda: calls.update(["google"]),
         wikimedia=lambda: calls.update(["wikimedia"]),
+        geeknews=lambda: calls.update(["geeknews"]),
         pipeline=lambda: calls.update(["pipeline"]),
         daily_evaluation=lambda: calls.update(["daily"]),
         weekly_evaluation=lambda: calls.update(["weekly"]),
@@ -26,6 +27,7 @@ def test_scheduler_registers_stable_non_overlapping_jobs_in_seoul_time() -> None
     assert set(jobs) == {
         "collect-google-hourly",
         "collect-wikimedia-daily",
+        "collect-geeknews-hourly",
         "pipeline-after-collection",
         "evaluate-daily",
         "evaluate-weekly",
@@ -46,6 +48,7 @@ def test_failed_google_job_does_not_suppress_wikimedia_job() -> None:
     actions = SchedulerActions(
         google=fail_google,
         wikimedia=lambda: calls.update(["wikimedia"]),
+        geeknews=lambda: calls.update(["geeknews"]),
         pipeline=lambda: None,
         daily_evaluation=lambda: None,
         weekly_evaluation=lambda: None,

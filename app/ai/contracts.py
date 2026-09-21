@@ -66,6 +66,7 @@ def interest_claim_text(entity_name: str, sources: set[Source]) -> str:
         Source.GOOGLE_TRENDS: "Google Trends",
         Source.WIKIMEDIA: "Wikimedia",
         Source.WIKIDATA: "Wikidata",
+        Source.GEEKNEWS: "GeekNews",
     }
     rendered_sources = ", ".join(
         source_names[source] for source in sorted(sources)

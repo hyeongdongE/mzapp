@@ -33,6 +33,7 @@ CURRENT_WINDOW = timedelta(hours=24)
 SOURCE_WINDOWS = {
     Source.GOOGLE_TRENDS: CURRENT_WINDOW,
     Source.WIKIMEDIA: timedelta(hours=72),
+    Source.GEEKNEWS: CURRENT_WINDOW,
 }
 BASELINE_LOOKBACK = timedelta(days=32)
 SOURCE_CAPS = {

@@ -120,6 +120,18 @@ def test_missing_metrics_create_no_strength_or_rising_state() -> None:
     assert lifecycle is TrendLifecycle.NEW
 
 
+def test_geeknews_candidate_signal_does_not_invent_popularity_strength() -> None:
+    extracted = FeatureExtractor().extract(
+        [point(1, source=Source.GEEKNEWS, metric=None, source_item_key="geeknews:34041")],
+        AS_OF,
+    )
+
+    assert extracted.current_strength == 0
+    assert extracted.signal.velocity == 0
+    assert extracted.signal.novelty == 1
+    assert extracted.missing_inputs == ()
+
+
 def test_repeated_same_source_item_is_one_observation_window() -> None:
     original = point(1, news_count=3, source_item_key="same-rss-item")
     repeated = replace(original, observed_at=AS_OF - timedelta(minutes=5))

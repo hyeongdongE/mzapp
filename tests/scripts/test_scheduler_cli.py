@@ -42,3 +42,23 @@ def test_daily_job_refreshes_delayed_wikimedia_source_day(monkeypatch) -> None:
     actions.daily_evaluation()
 
     assert days == [date(2026, 9, 22), date(2026, 9, 21)]
+
+
+def test_geeknews_job_uses_the_official_collector_path(monkeypatch) -> None:
+    sources: list[str] = []
+
+    async def record(source: str, _as_of: datetime, *, target_date=None) -> list:
+        del target_date
+        sources.append(source)
+        return []
+
+    monkeypatch.setattr(scheduler_script, "collect", record)
+    actions = scheduler_script.scheduled_actions(
+        date(2026, 9, 20),
+        Path("reports"),
+        now=lambda: datetime(2026, 9, 21, 5, 0, tzinfo=UTC),
+    )
+
+    actions.geeknews()
+
+    assert sources == ["geeknews"]

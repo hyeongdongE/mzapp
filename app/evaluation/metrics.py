@@ -108,7 +108,7 @@ def cost(records: Iterable[CostFact], *, approved: int) -> CostMetrics:
 
 
 def cross_source(source_sets: Iterable[frozenset[Source]]) -> CrossSourceMetrics:
-    discovery_sources = {Source.GOOGLE_TRENDS, Source.WIKIMEDIA}
+    discovery_sources = {Source.GOOGLE_TRENDS, Source.WIKIMEDIA, Source.GEEKNEWS}
     eligible = 0
     confirmed = 0
     for sources in source_sets:

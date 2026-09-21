@@ -30,16 +30,23 @@ from app.models.tables import (
 NOW = datetime(2026, 9, 21, 2, tzinfo=UTC)
 
 
-def seed_visible_entity(session: Session) -> TrendEntity:
+def seed_visible_entity(
+    session: Session, *, source: Source = Source.GOOGLE_TRENDS
+) -> TrendEntity:
+    source_url = (
+        "https://news.hada.io/topic?id=34041"
+        if source is Source.GEEKNEWS
+        else "https://trends.google.com/trending/rss?geo=KR"
+    )
     collection_run = CollectionRun(
         run_key="dashboard-google-run",
-        source=Source.GOOGLE_TRENDS,
+        source=source,
         started_at=NOW,
         completed_at=NOW,
         status=RunStatus.SUCCEEDED,
     )
     raw_payload = RawPayload(
-        source=Source.GOOGLE_TRENDS,
+        source=source,
         payload_hash="d" * 64,
         raw_payload={"encoding": "base64", "content": "PHJzcz4="},
         collected_at=NOW,
@@ -71,7 +78,7 @@ def seed_visible_entity(session: Session) -> TrendEntity:
         updated_at=NOW,
     )
     candidate = TrendCandidate(
-        source=Source.GOOGLE_TRENDS,
+        source=source,
         canonical_text="검증 트렌드 검색어",
         normalized_text="검증 트렌드 검색어",
         first_seen_at=NOW,
@@ -86,12 +93,12 @@ def seed_visible_entity(session: Session) -> TrendEntity:
     observation = SourceObservation(
         run_id=collection_run.id,
         raw_payload_id=raw_payload.id,
-        source=Source.GOOGLE_TRENDS,
+        source=source,
         source_item_id="dashboard-item",
         canonical_text="검증 트렌드 검색어",
         source_timestamp=NOW,
         observed_at=NOW,
-        source_url="https://trends.google.com/trending/rss?geo=KR",
+        source_url=source_url,
         metrics={"approx_traffic": 100},
     )
     session.add(observation)
@@ -148,6 +155,17 @@ def test_candidate_list_exposes_score_breakdown_and_source_attribution(
     assert "Google Trends" in response.text
     assert "내부 상대 점수" in response.text
     assert "72.5" in response.text
+
+
+def test_candidate_list_labels_geeknews_source(
+    client: TestClient, api_session: Session
+) -> None:
+    seed_visible_entity(api_session, source=Source.GEEKNEWS)
+
+    response = client.get("/internal/candidates")
+
+    assert response.status_code == 200
+    assert "GeekNews" in response.text
     assert "First seen" in response.text
     assert NOW.date().isoformat() in response.text
 

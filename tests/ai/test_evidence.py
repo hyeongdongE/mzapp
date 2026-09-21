@@ -184,6 +184,38 @@ def test_claim_kind_must_match_trusted_evidence_kind() -> None:
     assert what.publishable is True
 
 
+def test_geeknews_official_topic_is_valid_interest_evidence() -> None:
+    geeknews = evidence(1).model_copy(
+        update={
+            "source": Source.GEEKNEWS,
+            "source_url": "https://news.hada.io/topic?id=34041",
+            "fact": {
+                "canonical_text": "LangChain",
+                "metrics": {
+                    "entry_id": "https://news.hada.io/topic?id=34041",
+                    "link": "https://news.hada.io/topic?id=34041",
+                },
+                "source_timestamp": AS_OF.isoformat(),
+            },
+        }
+    )
+
+    checked = EvidenceChecker().check(
+        ClaimDraft(
+            kind=ClaimKind.INTEREST,
+            text=interest_claim_text("LangChain", {Source.GEEKNEWS}),
+            evidence_ids=[1],
+        ),
+        [geeknews],
+        entity_id=1,
+        entity_name="LangChain",
+        as_of=AS_OF,
+    )
+
+    assert checked.status is EvidenceStatus.SUPPORTED
+    assert checked.publishable is True
+
+
 def test_claim_text_must_match_the_evidence_fact() -> None:
     causal = evidence(1, kind="CAUSAL_EVENT").model_copy(
         update={

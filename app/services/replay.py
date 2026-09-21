@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.collectors.base import SourceItem
+from app.collectors.geeknews import parse_geeknews_atom
 from app.collectors.google_trends import parse_google_trends_rss
 from app.collectors.wikimedia import parse_wikimedia_top_pages
 from app.models.enums import ResolutionStatus, RunKind, RunStatus, Source
@@ -211,7 +212,9 @@ class ReplayService:
             select(RawFetch, RawPayload)
             .join(RawPayload, RawPayload.id == RawFetch.raw_payload_id)
             .where(
-                RawPayload.source.in_((Source.GOOGLE_TRENDS, Source.WIKIMEDIA)),
+                RawPayload.source.in_(
+                    (Source.GOOGLE_TRENDS, Source.WIKIMEDIA, Source.GEEKNEWS)
+                ),
                 RawFetch.collected_at >= from_,
                 RawFetch.collected_at <= to,
             )
@@ -324,6 +327,12 @@ def _parse_payload(source: Source, raw_bytes: bytes, raw_fetch: RawFetch) -> lis
                 f"unsupported Wikimedia parser version {raw_fetch.parser_version}"
             )
         return parse_wikimedia_top_pages(raw_bytes, observed_at, raw_fetch.request_url)
+    if source is Source.GEEKNEWS:
+        if raw_fetch.parser_version != "geeknews-atom-parser-v1":
+            raise InvalidRawPayload(
+                f"unsupported GeekNews parser version {raw_fetch.parser_version}"
+            )
+        return parse_geeknews_atom(raw_bytes, observed_at, raw_fetch.request_url)
     raise InvalidRawPayload(f"unsupported replay source {source.value}")
 
 

@@ -14,6 +14,7 @@ SEOUL = ZoneInfo("Asia/Seoul")
 class SchedulerActions:
     google: Callable[[], None]
     wikimedia: Callable[[], None]
+    geeknews: Callable[[], None]
     pipeline: Callable[[], None]
     daily_evaluation: Callable[[], None]
     weekly_evaluation: Callable[[], None]
@@ -33,6 +34,12 @@ def configure_scheduler(
         actions.wikimedia,
         CronTrigger(hour=9, minute=5, timezone=SEOUL),
         id="collect-wikimedia-daily",
+        **common,
+    )
+    scheduler.add_job(
+        actions.geeknews,
+        CronTrigger(minute=5, timezone=SEOUL),
+        id="collect-geeknews-hourly",
         **common,
     )
     scheduler.add_job(

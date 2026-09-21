@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 import hashlib
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import func, select
@@ -30,10 +32,30 @@ from app.models.tables import (
     TrendEntity,
     TrendSnapshot,
 )
-from app.services.replay import InvalidReplayRange, ReplayService, ReplayVersionConflict
+from app.services.replay import (
+    InvalidReplayRange,
+    ReplayService,
+    ReplayVersionConflict,
+    _parse_payload,
+)
 
 T0_START = datetime(2026, 9, 20, 0, 0, tzinfo=UTC)
 T0 = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
+GEEKNEWS_FIXTURE = Path(__file__).parents[1] / "fixtures" / "geeknews_atom.xml"
+
+
+def test_replay_reparses_geeknews_raw_payload() -> None:
+    fetch = SimpleNamespace(
+        collected_at=T0,
+        parser_version="geeknews-atom-parser-v1",
+        request_url="https://news.hada.io/rss/news",
+    )
+
+    items = _parse_payload(Source.GEEKNEWS, GEEKNEWS_FIXTURE.read_bytes(), fetch)
+
+    assert len(items) == 2
+    assert items[0].canonical_text.startswith("LangChain")
+    assert items[0].source_url == "https://news.hada.io/topic?id=34041"
 
 
 def seed_historical_projection(session: Session) -> tuple[TrendCandidate, TrendEntity]:

@@ -43,6 +43,7 @@ APPROVED_SOURCE_HOSTS = {
     Source.GOOGLE_TRENDS: {"trends.google.com"},
     Source.WIKIMEDIA: {"wikimedia.org"},
     Source.WIKIDATA: {"wikidata.org", "www.wikidata.org"},
+    Source.GEEKNEWS: {"news.hada.io"},
 }
 
 
@@ -379,7 +380,8 @@ def _valid_provenance(
 ) -> tuple[bool, str]:
     if record.kind == "TREND_SIGNAL":
         if (
-            record.source not in {Source.GOOGLE_TRENDS, Source.WIKIMEDIA}
+            record.source
+            not in {Source.GOOGLE_TRENDS, Source.WIKIMEDIA, Source.GEEKNEWS}
             or record.observation_id is None
             or record.resolution_attempt_id is not None
             or record.raw_fetch_id is not None
