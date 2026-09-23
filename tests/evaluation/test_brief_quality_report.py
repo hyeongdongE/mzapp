@@ -32,8 +32,8 @@ def test_latest_published_unreviewed_does_not_fall_back(db_session: Session) -> 
     )
 
     assert report["includedDates"] == []
-    assert report["excludedDates"][0]["briefId"] == latest.id
-    assert report["excludedDates"][0]["reason"] == "LATEST_PUBLISHED_VERSION_UNREVIEWED"
+    latest_exclusion = next(row for row in report["excludedDates"] if row["briefId"] == latest.id)
+    assert latest_exclusion["reason"] == "LATEST_PUBLISHED_VERSION_UNREVIEWED"
 
 
 def test_low_signal_day_is_operational_but_not_quality_denominator(db_session: Session) -> None:
