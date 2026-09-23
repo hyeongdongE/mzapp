@@ -6,6 +6,7 @@ import pytest
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.services.scheduler import SchedulerActions, configure_scheduler
+from scripts.scheduler import scheduled_actions
 
 
 def test_scheduler_registers_stable_non_overlapping_jobs_in_seoul_time() -> None:
@@ -62,3 +63,21 @@ def test_failed_google_job_does_not_suppress_wikimedia_job() -> None:
     jobs["collect-wikimedia-daily"].func()
 
     assert calls == Counter({"google": 1, "wikimedia": 1})
+
+
+def test_production_scheduler_actions_include_intelligence_jobs(tmp_path) -> None:
+    actions = scheduled_actions(
+        poc_start=__import__("datetime").date(2026, 9, 1),
+        output_dir=tmp_path,
+    )
+    scheduler = BackgroundScheduler()
+
+    configure_scheduler(scheduler, actions)
+
+    assert actions.intelligence is not None
+    assert {
+        "intelligence-collect-15m",
+        "intelligence-process-15m",
+        "intelligence-generate-0735",
+        "intelligence-publish-0800",
+    } <= {job.id for job in scheduler.get_jobs()}

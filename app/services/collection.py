@@ -18,6 +18,7 @@ from app.repositories.collection import CollectionRepository
 class PersistResult:
     run_id: int
     payload_id: int
+    fetch_id: int
     inserted_observations: int
 
 
@@ -33,7 +34,7 @@ class CollectionService:
             batch = await collector.collect(as_of)
         except CollectorError as exc:
             self._session.rollback()
-            self._record_failure(
+            self.record_failure(
                 collector.source,
                 run_key,
                 started_at=started_at,
@@ -142,9 +143,30 @@ class CollectionService:
         run.completed_at = completed_at or batch.collected_at
         run.error_code = None
         self._session.flush()
-        return PersistResult(run_id=run.id, payload_id=payload.id, inserted_observations=inserted)
+        return PersistResult(
+            run_id=run.id,
+            payload_id=payload.id,
+            fetch_id=fetch.id,
+            inserted_observations=inserted,
+        )
 
-    def _record_failure(
+    def completed_result(self, source: Source, run_key: str) -> PersistResult | None:
+        run = self._repo.find_run(run_key)
+        if run is None or run.status is not RunStatus.SUCCEEDED:
+            return None
+        if run.source is not source:
+            raise ValueError("collection run key cannot be reused across sources")
+        fetch = self._repo.find_fetch(run.id)
+        if fetch is None:
+            raise RuntimeError("succeeded collection run is missing fetch provenance")
+        return PersistResult(
+            run_id=run.id,
+            payload_id=fetch.raw_payload_id,
+            fetch_id=fetch.id,
+            inserted_observations=0,
+        )
+
+    def record_failure(
         self,
         source,
         run_key: str,

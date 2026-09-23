@@ -40,7 +40,7 @@ export default function Onboarding() {
     try {
       const result = await api.updateInterests(selected)
       setInterests(result.categories)
-      navigate('/feed')
+      navigate('/today')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '저장하지 못했습니다.')
     } finally {
@@ -50,7 +50,7 @@ export default function Onboarding() {
 
   return (
     <main className="onboarding page">
-      <div className="brand-lockup"><BrandMark size={38} /><span>MZ RADAR</span></div>
+      <div className="brand-lockup"><BrandMark size={38} /><span>SOLOPILOT</span></div>
       <header className="onboarding-header">
         <h1>요즘 뜨는 것만,<br /><span>네 취향대로.</span></h1>
         <p className="lede">관심 있는 분야를 고르면<br />새로운 흐름만 골라드릴게요.</p>

@@ -34,11 +34,34 @@ def test_settings_use_official_endpoints_by_default() -> None:
     assert settings.wikimedia_api_url.host == "wikimedia.org"
     assert settings.wikidata_api_url.host == "www.wikidata.org"
     assert settings.geeknews_rss_url.host == "news.hada.io"
+    assert settings.hacker_news_api_url.host == "hacker-news.firebaseio.com"
+    assert settings.github_api_url.host == "api.github.com"
+    assert settings.cloudflare_rss_url.host == "blog.cloudflare.com"
+    assert settings.aws_rss_url.host == "aws.amazon.com"
+    assert settings.github_release_repositories
     assert settings.dashboard_host == "127.0.0.1"
 
 
 def test_settings_reject_unapproved_geeknews_host(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GEEKNEWS_RSS_URL", "https://example.test/rss")
+
+    with pytest.raises(ValidationError):
+        get_settings()
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("HACKER_NEWS_API_URL", "https://example.test/v0"),
+        ("GITHUB_API_URL", "https://example.test"),
+        ("CLOUDFLARE_RSS_URL", "https://example.test/rss"),
+        ("AWS_RSS_URL", "https://example.test/rss"),
+    ],
+)
+def test_settings_reject_unapproved_intelligence_hosts(
+    monkeypatch: pytest.MonkeyPatch, name: str, value: str
+) -> None:
+    monkeypatch.setenv(name, value)
 
     with pytest.raises(ValidationError):
         get_settings()

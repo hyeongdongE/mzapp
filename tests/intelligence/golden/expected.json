@@ -1,0 +1,14 @@
+{
+  "groups": [
+    {"name": "four-source-same-event", "kind": "positive-event", "expected_cluster_count": 1, "item_ids": [1, 2, 3, 4]},
+    {"name": "same-entity-different-event", "kind": "hard-negative", "expected_cluster_count": 5, "item_ids": [5, 6, 7, 8, 9]},
+    {"name": "same-day-different-release", "kind": "hard-negative", "expected_cluster_count": 5, "item_ids": [10, 11, 12, 13, 14]},
+    {"name": "follow-up-vs-new-event", "kind": "hard-negative", "expected_cluster_count": 5, "item_ids": [15, 16, 17, 18, 19]},
+    {"name": "tracking-url-duplicates", "kind": "positive-duplicate", "expected_cluster_count": 1, "item_ids": [20, 21, 22, 23, 24]},
+    {"name": "repeated-fetch-duplicates", "kind": "positive-duplicate", "expected_cluster_count": 1, "item_ids": [25, 26, 27, 28, 29]},
+    {"name": "github-release-duplicates", "kind": "positive-duplicate", "expected_cluster_count": 1, "item_ids": [30, 31, 32, 33, 34]},
+    {"name": "title-collision-hard-negative", "kind": "hard-negative", "expected_cluster_count": 5, "item_ids": [35, 36, 37, 38, 39]},
+    {"name": "product-name-collision", "kind": "hard-negative", "expected_cluster_count": 5, "item_ids": [40, 41, 42, 43, 44]},
+    {"name": "daily-brief-mixed", "kind": "ranking", "expected_cluster_count": 6, "item_ids": [45, 46, 47, 48, 49, 50]}
+  ]
+}

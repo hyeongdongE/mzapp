@@ -49,11 +49,11 @@ test('labels demo data and requires at least one interest', async () => {
   expect(continueButton).toBeEnabled()
 })
 
-test('submits interests and navigates to the feed', async () => {
+test('submits interests and navigates to Today', async () => {
   render(<App />)
 
   await userEvent.click(await screen.findByRole('checkbox', { name: 'AI / IT' }))
   await userEvent.click(screen.getByRole('button', { name: '계속하기' }))
 
-  await waitFor(() => expect(window.location.pathname).toBe('/feed'))
+  await waitFor(() => expect(window.location.pathname).toBe('/today'))
 })

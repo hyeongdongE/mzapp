@@ -1,12 +1,8 @@
-# AI Personal Trend Radar Data PoC
+# SoloPilot — Daily IT Intelligence
 
-Official-data-only trend pipeline plus a mobile-first Personal Trend Radar PWA. The modular
-FastAPI/PostgreSQL application keeps the replayable Data PoC intact and adds anonymous interests,
-an evidence-gated personal feed, feedback, saves, notification preferences, and LIVE-only product
-analytics.
+SoloPilot turns a bounded set of community, maintainer, and official IT sources into an evidence-grounded daily brief that stays within a five-minute reading-time gate. The existing replayable Trend Radar data path and `/saved` experience remain available while the new default user surface is `/today`.
 
-Real LLM and Meta providers are disabled. No unofficial scraping, pytrends, private endpoints, or
-credential-dependent calls are required.
+Real LLM and Meta providers are disabled. The First Slice uses GeekNews, Hacker News, GitHub Releases, Cloudflare Blog, and AWS News Blog through official RSS/API endpoints. Google Trends and Wikimedia adapters are retained but disabled in the intelligence source registry.
 
 ## Prerequisites
 
@@ -31,6 +27,7 @@ evaluation evidence supports an operational status change.
 Collect and process official data:
 
 ```powershell
+docker compose run --rm api uv run --no-sync python scripts/run_intelligence_pipeline.py --collect --process --brief-date 2026-09-23
 docker compose run --rm api uv run --no-sync python scripts/collect.py --source google
 docker compose run --rm api uv run --no-sync python scripts/collect.py --source wikimedia
 docker compose run --rm api uv run --no-sync python scripts/build_entities.py
@@ -74,6 +71,7 @@ Verification:
 ```powershell
 uv run ruff check .
 uv run pytest -q
+uv run pytest tests/e2e/test_intelligence_vertical_slice.py -q
 Push-Location frontend
 npm ci
 npm test
@@ -98,6 +96,9 @@ PostgreSQL opt-in tests require an already migrated, isolated database through
 
 ## Documentation
 
+- [IT intelligence source policy](docs/it-intelligence/source-policy.md)
+- [First Slice quality evaluation](docs/it-intelligence/quality-evaluation.md)
+- [First Slice implementation progress](docs/it-intelligence/implementation-progress.md)
 - [Implementation plan](docs/poc-plan.md)
 - [Official data sources](docs/data-sources.md)
 - [GeekNews LIVE verification](docs/geeknews-live-verification.md)

@@ -1,0 +1,24 @@
+[
+  {
+    "id": 991,
+    "tag_name": "v1.0.0",
+    "name": "Agent SDK 1.0",
+    "html_url": "https://github.com/acme/agent-sdk/releases/tag/v1.0.0",
+    "published_at": "2026-09-23T01:00:00Z",
+    "draft": false,
+    "prerelease": false,
+    "body": "First stable release.",
+    "author": {"login": "acme-maintainer"}
+  },
+  {
+    "id": 990,
+    "tag_name": "v1.0.0-rc1",
+    "name": "Agent SDK 1.0 RC",
+    "html_url": "https://github.com/acme/agent-sdk/releases/tag/v1.0.0-rc1",
+    "published_at": "2026-09-22T01:00:00Z",
+    "draft": true,
+    "prerelease": true,
+    "body": "Draft candidate.",
+    "author": {"login": "acme-maintainer"}
+  }
+]

@@ -62,15 +62,15 @@ beforeEach(() => {
   fetchMock.mockReset()
 })
 
-test('mobile app shell exposes four primary destinations including Explore', async () => {
+test('mobile app shell exposes Today, Radar, Saved, and Settings', async () => {
   installApi()
   window.history.pushState({}, '', '/feed')
   render(<App />)
 
   const navigation = await screen.findByRole('navigation', { name: '주요 메뉴' })
   expect(navigation).toHaveClass('bottom-nav')
-  expect(screen.getByRole('link', { name: '홈' })).toHaveAttribute('href', '/feed')
-  expect(screen.getByRole('link', { name: '둘러보기' })).toHaveAttribute('href', '/explore')
+  expect(screen.getByRole('link', { name: 'Today' })).toHaveAttribute('href', '/today')
+  expect(screen.getByRole('link', { name: 'Radar' })).toHaveAttribute('href', '/radar')
   expect(screen.getByRole('link', { name: '저장' })).toHaveAttribute('href', '/saved')
   expect(screen.getByRole('link', { name: '설정' })).toHaveAttribute('href', '/settings')
 })

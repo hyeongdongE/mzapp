@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     wikimedia_api_url: HttpUrl = HttpUrl("https://wikimedia.org/api/rest_v1")
     wikidata_api_url: HttpUrl = HttpUrl("https://www.wikidata.org/w/api.php")
     geeknews_rss_url: HttpUrl = HttpUrl("https://news.hada.io/rss/news")
+    hacker_news_api_url: HttpUrl = HttpUrl("https://hacker-news.firebaseio.com/v0")
+    github_api_url: HttpUrl = HttpUrl("https://api.github.com")
+    github_release_repositories: tuple[str, ...] = (
+        "anthropics/claude-code",
+        "openai/codex",
+    )
+    cloudflare_rss_url: HttpUrl = HttpUrl("https://blog.cloudflare.com/rss/")
+    aws_rss_url: HttpUrl = HttpUrl("https://aws.amazon.com/blogs/aws/feed/")
     http_timeout_seconds: float = 10.0
     http_max_bytes: int = 2_000_000
     http_retries: int = 3
@@ -62,6 +70,26 @@ class Settings(BaseSettings):
     @classmethod
     def validate_geeknews_endpoint(cls, value: HttpUrl) -> HttpUrl:
         return cls._validate_official_https(value, {"news.hada.io"})
+
+    @field_validator("hacker_news_api_url")
+    @classmethod
+    def validate_hacker_news_endpoint(cls, value: HttpUrl) -> HttpUrl:
+        return cls._validate_official_https(value, {"hacker-news.firebaseio.com"})
+
+    @field_validator("github_api_url")
+    @classmethod
+    def validate_github_endpoint(cls, value: HttpUrl) -> HttpUrl:
+        return cls._validate_official_https(value, {"api.github.com"})
+
+    @field_validator("cloudflare_rss_url")
+    @classmethod
+    def validate_cloudflare_endpoint(cls, value: HttpUrl) -> HttpUrl:
+        return cls._validate_official_https(value, {"blog.cloudflare.com"})
+
+    @field_validator("aws_rss_url")
+    @classmethod
+    def validate_aws_endpoint(cls, value: HttpUrl) -> HttpUrl:
+        return cls._validate_official_https(value, {"aws.amazon.com"})
 
     @staticmethod
     def _validate_official_https(value: HttpUrl, allowed_hosts: set[str]) -> HttpUrl:

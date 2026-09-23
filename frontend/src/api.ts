@@ -1,4 +1,4 @@
-import type { CategoriesResponse, Category, Feedback, TrendDetail, TrendItem } from './types'
+import type { CategoriesResponse, Category, Feedback, TodayBrief, TrendDetail, TrendItem } from './types'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -20,6 +20,7 @@ export const api = {
     body: JSON.stringify({ categories }),
   }),
   feed: () => request<{ dataMode: 'LIVE' | 'DEMO'; items: TrendItem[] }>('/api/public/feed'),
+  today: () => request<TodayBrief>('/api/public/today'),
   trend: (id: string) => request<TrendDetail>(`/api/public/trends/${id}`),
   feedback: (id: string, feedbackType: Feedback) => request<{ feedback: Feedback }>(`/api/public/trends/${id}/feedback`, {
     method: 'PUT', body: JSON.stringify({ feedbackType }),

@@ -152,7 +152,7 @@ def test_stale_failure_transaction_cannot_overwrite_committed_success() -> None:
 
         service = CollectionService(stale_failure)
         service._repo.find_run = lambda _run_key: stale_run
-        service._record_failure(
+        service.record_failure(
             Source.GOOGLE_TRENDS,
             run_key,
             started_at=datetime(2026, 9, 20, 14, 0, tzinfo=UTC),

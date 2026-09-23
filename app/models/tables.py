@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -8,6 +8,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -25,10 +26,14 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.models.enums import (
+    BriefStatus,
     CandidateStatus,
     Category,
     CategoryAvailability,
+    ClusterStatus,
     DataMode,
+    EvidenceConfidence,
+    EvidenceKind,
     EvidenceStatus,
     FeedbackType,
     HumanEvaluationLabel,
@@ -575,3 +580,270 @@ class ProductEvent(Base):
     category: Mapped[Category | None] = mapped_column(enum_column(Category))
     data_mode: Mapped[DataMode] = mapped_column(enum_column(DataMode), nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SourceHealth(Base):
+    __tablename__ = "source_health"
+
+    source: Mapped[Source] = mapped_column(enum_column(Source), primary_key=True)
+    collector_key: Mapped[str] = mapped_column(String(240), primary_key=True, default="default")
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_failure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    consecutive_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error_code: Mapped[str | None] = mapped_column(String(120))
+    freshness_state: Mapped[str] = mapped_column(String(32), nullable=False, default="UNKNOWN")
+    covered_through: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class RawItem(Base):
+    __tablename__ = "raw_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "source",
+            "external_id",
+            "normalizer_version",
+            name="uq_raw_item_source_external_version",
+        ),
+        Index("ix_raw_item_source_published", "source", "published_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    raw_fetch_id: Mapped[int] = mapped_column(ForeignKey("raw_fetches.id"), nullable=False)
+    source: Mapped[Source] = mapped_column(enum_column(Source), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(240), nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    original_url: Mapped[str | None] = mapped_column(Text)
+    author: Mapped[str | None] = mapped_column(String(240))
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    canonical_url: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    normalized_title: Mapped[str] = mapped_column(String(500), nullable=False)
+    snippet: Mapped[str | None] = mapped_column(Text)
+    item_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
+    normalizer_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class EventCluster(Base):
+    __tablename__ = "event_clusters"
+    __table_args__ = (Index("ix_event_cluster_status_seen", "status", "last_seen_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    public_id: Mapped[str] = mapped_column(String(36), unique=True, nullable=False)
+    canonical_title: Mapped[str] = mapped_column(String(500), nullable=False)
+    summary: Mapped[str | None] = mapped_column(Text)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[ClusterStatus] = mapped_column(enum_column(ClusterStatus), nullable=False)
+    clustering_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    review_status: Mapped[ReviewStatus] = mapped_column(
+        enum_column(ReviewStatus), nullable=False, default=ReviewStatus.PENDING
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class EventClusterItem(Base):
+    __tablename__ = "event_cluster_items"
+    __table_args__ = (
+        UniqueConstraint("raw_item_id", name="uq_event_cluster_raw_item"),
+        UniqueConstraint("event_cluster_id", "raw_item_id", name="uq_event_cluster_item"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_cluster_id: Mapped[int] = mapped_column(
+        ForeignKey("event_clusters.id"), nullable=False
+    )
+    raw_item_id: Mapped[int] = mapped_column(ForeignKey("raw_items.id"), nullable=False)
+    assignment_method: Mapped[str] = mapped_column(String(80), nullable=False)
+    assignment_score: Mapped[float | None] = mapped_column(Float)
+    reason_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    human_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class IntelligenceEntity(Base):
+    __tablename__ = "intelligence_entities"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    canonical_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
+    entity_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    aliases: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class EventEntityLink(Base):
+    __tablename__ = "event_entity_links"
+    __table_args__ = (
+        UniqueConstraint("event_cluster_id", "entity_id", "role", name="uq_event_entity_role"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_cluster_id: Mapped[int] = mapped_column(
+        ForeignKey("event_clusters.id"), nullable=False
+    )
+    entity_id: Mapped[int] = mapped_column(
+        ForeignKey("intelligence_entities.id"), nullable=False
+    )
+    role: Mapped[str] = mapped_column(String(40), nullable=False)
+
+
+class EventEvidence(Base):
+    __tablename__ = "event_evidence"
+    __table_args__ = (
+        UniqueConstraint("event_cluster_id", "raw_item_id", name="uq_event_evidence_item"),
+        Index("ix_event_evidence_event_kind", "event_cluster_id", "kind"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_cluster_id: Mapped[int] = mapped_column(
+        ForeignKey("event_clusters.id"), nullable=False
+    )
+    raw_item_id: Mapped[int] = mapped_column(ForeignKey("raw_items.id"), nullable=False)
+    kind: Mapped[EvidenceKind] = mapped_column(enum_column(EvidenceKind), nullable=False)
+    fact: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    source_url: Mapped[str] = mapped_column(Text, nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    publishable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class EventFact(Base):
+    __tablename__ = "event_facts"
+    __table_args__ = (
+        Index("ix_event_fact_event_publishable", "event_cluster_id", "publishable"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_cluster_id: Mapped[int] = mapped_column(
+        ForeignKey("event_clusters.id"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    structured_value: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    publishable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    validator_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class EventFactEvidence(Base):
+    __tablename__ = "event_fact_evidence"
+    __table_args__ = (
+        UniqueConstraint("event_fact_id", "event_evidence_id", name="uq_event_fact_evidence"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_fact_id: Mapped[int] = mapped_column(ForeignKey("event_facts.id"), nullable=False)
+    event_evidence_id: Mapped[int] = mapped_column(
+        ForeignKey("event_evidence.id"), nullable=False
+    )
+    support_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_field: Mapped[str] = mapped_column(String(120), nullable=False)
+    validation_result: Mapped[str] = mapped_column(String(40), nullable=False)
+    validator_version: Mapped[str] = mapped_column(String(80), nullable=False)
+
+
+class EventAssessment(Base):
+    __tablename__ = "event_assessments"
+    __table_args__ = (
+        UniqueConstraint(
+            "event_cluster_id", "assessment_version", name="uq_event_assessment_version"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_cluster_id: Mapped[int] = mapped_column(
+        ForeignKey("event_clusters.id"), nullable=False
+    )
+    confidence: Mapped[EvidenceConfidence] = mapped_column(
+        enum_column(EvidenceConfidence), nullable=False
+    )
+    confidence_breakdown: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    importance: Mapped[float] = mapped_column(Float, nullable=False)
+    importance_breakdown: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    assessment_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    assessed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DailyBrief(Base):
+    __tablename__ = "daily_briefs"
+    __table_args__ = (
+        UniqueConstraint("brief_date", "version", name="uq_daily_brief_date_version"),
+        Index("ix_daily_brief_date_status", "brief_date", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    brief_date: Mapped[date] = mapped_column(Date, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[BriefStatus] = mapped_column(enum_column(BriefStatus), nullable=False)
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    window_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    today_in_one_line: Mapped[str | None] = mapped_column(Text)
+    raw_item_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    event_cluster_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    candidate_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    selected_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    word_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    reading_time_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    generation_version: Mapped[str] = mapped_column(String(80), nullable=False)
+
+
+class BriefItem(Base):
+    __tablename__ = "brief_items"
+    __table_args__ = (
+        UniqueConstraint("brief_id", "position", name="uq_brief_item_position"),
+        UniqueConstraint("brief_id", "event_cluster_id", name="uq_brief_item_event"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    brief_id: Mapped[int] = mapped_column(ForeignKey("daily_briefs.id"), nullable=False)
+    event_cluster_id: Mapped[int] = mapped_column(
+        ForeignKey("event_clusters.id"), nullable=False
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    headline: Mapped[str] = mapped_column(String(500), nullable=False)
+    category: Mapped[str] = mapped_column(String(40), nullable=False)
+    what_happened: Mapped[str] = mapped_column(Text, nullable=False)
+    why_it_matters: Mapped[str] = mapped_column(Text, nullable=False)
+    fact_text: Mapped[str] = mapped_column(Text, nullable=False)
+    interpretation_text: Mapped[str] = mapped_column(Text, nullable=False)
+    watch_text: Mapped[str] = mapped_column(Text, nullable=False)
+    source_links: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    importance: Mapped[float] = mapped_column(Float, nullable=False)
+
+
+class BriefItemFact(Base):
+    __tablename__ = "brief_item_facts"
+    __table_args__ = (
+        UniqueConstraint(
+            "brief_item_id",
+            "event_fact_id",
+            "event_evidence_id",
+            name="uq_brief_item_fact_evidence",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    brief_item_id: Mapped[int] = mapped_column(ForeignKey("brief_items.id"), nullable=False)
+    event_fact_id: Mapped[int] = mapped_column(ForeignKey("event_facts.id"), nullable=False)
+    event_evidence_id: Mapped[int] = mapped_column(
+        ForeignKey("event_evidence.id"), nullable=False
+    )
+    fact_text_snapshot: Mapped[str] = mapped_column(Text, nullable=False)

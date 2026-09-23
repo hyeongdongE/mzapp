@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
@@ -33,6 +33,10 @@ class HttpRequestFailed(CollectorError):
         super().__init__(f"official source request failed ({code})")
 
 
+class IncompleteCoverage(CollectorError):
+    code = "INCOMPLETE_COVERAGE"
+
+
 @dataclass(frozen=True)
 class SourceItem:
     source_item_id: str
@@ -41,6 +45,11 @@ class SourceItem:
     canonical_text: str
     source_url: str
     metrics: dict[str, JsonValue]
+    title: str | None = None
+    original_url: str | None = None
+    author: str | None = None
+    snippet: str | None = None
+    metadata: dict[str, JsonValue] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -52,6 +61,7 @@ class CollectionBatch:
     items: list[SourceItem]
     collector_version: str
     parser_version: str
+    coverage_complete: bool = False
 
 
 class Collector(Protocol):
