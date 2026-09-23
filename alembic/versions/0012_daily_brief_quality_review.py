@@ -39,11 +39,12 @@ def upgrade() -> None:
             SET assessment_version = (
                 SELECT assessment.assessment_version
                 FROM event_assessments AS assessment
-                JOIN daily_briefs AS brief ON brief.id = item.brief_id
                 WHERE assessment.event_cluster_id = item.event_cluster_id
-                  AND assessment.assessed_at <= brief.generated_at
-                ORDER BY assessment.assessed_at DESC, assessment.id DESC
-                LIMIT 1
+                  AND (
+                      SELECT count(*)
+                      FROM event_assessments AS candidates
+                      WHERE candidates.event_cluster_id = item.event_cluster_id
+                  ) = 1
             )
             """
         )
@@ -53,7 +54,7 @@ def upgrade() -> None:
     ).scalar_one()
     if missing_snapshot_count:
         raise RuntimeError(
-            "cannot migrate brief_items without an assessment at or before brief generation"
+            "cannot migrate brief_items with missing or ambiguous assessment provenance"
         )
     op.alter_column(
         "brief_items",

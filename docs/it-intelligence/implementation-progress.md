@@ -49,11 +49,16 @@ Branch: `codex/daily-brief-quality-validation`
 - Eligible real Brief dates: **0 recorded in this implementation cycle**
 - Validation report: **not yet eligible for `VALIDATION_SAMPLE_COMPLETE`**
 
-Field-use readiness evidence on 2026-09-24: 398 backend tests passed against the
+Field-use readiness evidence on 2026-09-24: 399 backend tests passed against the
 configured PostgreSQL integration and migration databases; the focused quality
 suite passed 70 tests; PostgreSQL `0011 → 0012 → 0011 → head` migration/backfill
 and concurrent review-session/activity behavior passed; Ruff, ESLint, TypeScript,
 16 frontend tests, and the production frontend build passed.
+
+The PR review follow-up also verifies the supported combined CLI chronology where
+the sole selected assessment can be timestamped after the captured Brief generation
+time. Migration backfill accepts that unambiguous provenance and fails closed when
+legacy data contains multiple possible assessment versions.
 
 Implementation artifacts:
 

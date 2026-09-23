@@ -47,7 +47,7 @@ def test_0012_upgrade_backfills_brief_and_round_trips() -> None:
                     importance_breakdown, assessment_version, assessed_at
                 ) VALUES (
                     :cluster_id, 'STRONG', '{}'::json, 90,
-                    '{}'::json, 'assessment-migration-v1', TIMESTAMPTZ '2026-09-23 11:00:00+00'
+                    '{}'::json, 'assessment-migration-v1', TIMESTAMPTZ '2026-09-23 13:00:00+00'
                 )
                 """
             ),
@@ -142,3 +142,75 @@ def test_0012_upgrade_backfills_brief_and_round_trips() -> None:
         assert connection.execute(text("SELECT count(*) FROM daily_briefs")).scalar_one() == 1
     downgraded.dispose()
     command.upgrade(config, "head")
+
+
+def test_0012_rejects_ambiguous_legacy_assessment_provenance() -> None:
+    assert TEST_DATABASE_URL is not None
+    os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+    get_settings.cache_clear()
+    config = Config("alembic.ini")
+    command.upgrade(config, "0011")
+    engine = create_engine(TEST_DATABASE_URL)
+    with engine.begin() as connection:
+        cluster_id = connection.execute(
+            text(
+                """
+                INSERT INTO event_clusters (
+                    public_id, canonical_title, first_seen_at, last_seen_at,
+                    status, clustering_version
+                ) VALUES (
+                    'ambiguous-migration-cluster', 'Ambiguous event', NOW(), NOW(),
+                    'ACTIVE', 'cluster-v1'
+                ) RETURNING id
+                """
+            )
+        ).scalar_one()
+        for version, assessed_at in (
+            ("assessment-v1", "2026-09-23 11:00:00+00"),
+            ("assessment-v2", "2026-09-23 13:00:00+00"),
+        ):
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO event_assessments (
+                        event_cluster_id, confidence, confidence_breakdown, importance,
+                        importance_breakdown, assessment_version, assessed_at
+                    ) VALUES (
+                        :cluster_id, 'STRONG', '{}'::json, 90, '{}'::json,
+                        :version, CAST(:assessed_at AS timestamptz)
+                    )
+                    """
+                ),
+                {"cluster_id": cluster_id, "version": version, "assessed_at": assessed_at},
+            )
+        brief_id = connection.execute(
+            text(
+                """
+                INSERT INTO daily_briefs (
+                    brief_date, version, status, window_start, window_end, generated_at,
+                    generation_version
+                ) VALUES (
+                    DATE '2026-09-23', 1, 'PUBLISHED', NOW(), NOW(), NOW(), 'brief-v1'
+                ) RETURNING id
+                """
+            )
+        ).scalar_one()
+        connection.execute(
+            text(
+                """
+                INSERT INTO brief_items (
+                    brief_id, event_cluster_id, position, headline, category,
+                    what_happened, why_it_matters, fact_text, interpretation_text,
+                    watch_text, source_links, importance
+                ) VALUES (
+                    :brief_id, :cluster_id, 1, 'Headline', 'IT', 'What', 'Why',
+                    'Fact', 'Interpretation', 'Watch', '[]'::json, 90
+                )
+                """
+            ),
+            {"brief_id": brief_id, "cluster_id": cluster_id},
+        )
+    engine.dispose()
+
+    with pytest.raises(RuntimeError, match="ambiguous assessment provenance"):
+        command.upgrade(config, "0012")
