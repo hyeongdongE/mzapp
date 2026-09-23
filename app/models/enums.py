@@ -169,3 +169,77 @@ class ProductEventType(StrEnum):
     FEEDBACK_INCORRECT = "FEEDBACK_INCORRECT"
     TREND_SAVED = "TREND_SAVED"
     RETURN_VISIT = "RETURN_VISIT"
+
+
+class BriefReviewSessionStatus(StrEnum):
+    OPEN = "OPEN"
+    COMPLETED = "COMPLETED"
+
+
+class BriefItemUsefulness(StrEnum):
+    USEFUL = "USEFUL"
+    NOT_USEFUL = "NOT_USEFUL"
+
+
+class EventSelectionVerdict(StrEnum):
+    KEEP = "KEEP"
+    SHOULD_EXCLUDE = "SHOULD_EXCLUDE"
+    UNSURE = "UNSURE"
+
+
+class FactCorrectness(StrEnum):
+    CORRECT = "CORRECT"
+    PARTIALLY_CORRECT = "PARTIALLY_CORRECT"
+    INCORRECT = "INCORRECT"
+    UNVERIFIABLE = "UNVERIFIABLE"
+
+
+class InterpretationQuality(StrEnum):
+    STRONG = "STRONG"
+    ACCEPTABLE = "ACCEPTABLE"
+    WEAK = "WEAK"
+    MISLEADING = "MISLEADING"
+
+
+class WatchUsefulness(StrEnum):
+    ACTIONABLE = "ACTIONABLE"
+    USEFUL = "USEFUL"
+    GENERIC = "GENERIC"
+    NOT_USEFUL = "NOT_USEFUL"
+
+
+class VerbosityVerdict(StrEnum):
+    TOO_SHORT = "TOO_SHORT"
+    JUST_RIGHT = "JUST_RIGHT"
+    TOO_LONG = "TOO_LONG"
+
+
+class EvidenceSetUsefulness(StrEnum):
+    ESSENTIAL = "ESSENTIAL"
+    HELPFUL = "HELPFUL"
+    REDUNDANT = "REDUNDANT"
+    NOT_USEFUL = "NOT_USEFUL"
+
+
+class IncorrectMergeVerdict(StrEnum):
+    NO_INCORRECT_MERGE = "NO_INCORRECT_MERGE"
+    INCORRECT_MERGE = "INCORRECT_MERGE"
+    UNSURE = "UNSURE"
+
+
+class DuplicateEscapeVerdict(StrEnum):
+    NO_DUPLICATE_ESCAPE = "NO_DUPLICATE_ESCAPE"
+    DUPLICATE_ESCAPE = "DUPLICATE_ESCAPE"
+    UNSURE = "UNSURE"
+
+
+class MissingEventDiscoverySource(StrEnum):
+    GEEKNEWS = "GEEKNEWS"
+    HACKER_NEWS = "HACKER_NEWS"
+    GITHUB = "GITHUB"
+    OFFICIAL_WEB = "OFFICIAL_WEB"
+    X = "X"
+    ARXIV = "ARXIV"
+    HUGGING_FACE = "HUGGING_FACE"
+    REDDIT = "REDDIT"
+    OTHER = "OTHER"
