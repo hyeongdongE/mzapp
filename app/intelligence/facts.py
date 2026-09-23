@@ -33,9 +33,16 @@ class FactBuilder:
                 .order_by(EventFact.id)
             )
         )
-        if existing:
-            validator = FactValidator(self._session)
-            return [validator.validate(fact.id) for fact in existing]
+        existing_by_key = {(fact.kind, fact.text): fact for fact in existing}
+        existing_links = set(
+            self._session.execute(
+                select(
+                    EventFactEvidence.event_fact_id,
+                    EventFactEvidence.event_evidence_id,
+                ).join(EventFact, EventFact.id == EventFactEvidence.event_fact_id)
+                .where(EventFact.event_cluster_id == event_id)
+            ).all()
+        )
 
         rows = self._session.execute(
             select(EventEvidence, RawItem)
@@ -54,17 +61,22 @@ class FactBuilder:
                 candidates[key][1].append(evidence)
 
         for (kind, text), (structured_value, evidence_rows) in candidates.items():
-            fact = EventFact(
-                event_cluster_id=event_id,
-                kind=kind,
-                text=text,
-                structured_value=structured_value,
-                publishable=True,
-                validator_version=VALIDATOR_VERSION,
-            )
-            self._session.add(fact)
-            self._session.flush()
+            fact = existing_by_key.get((kind, text))
+            if fact is None:
+                fact = EventFact(
+                    event_cluster_id=event_id,
+                    kind=kind,
+                    text=text,
+                    structured_value=structured_value,
+                    publishable=True,
+                    validator_version=VALIDATOR_VERSION,
+                )
+                self._session.add(fact)
+                self._session.flush()
+                existing_by_key[(kind, text)] = fact
             for evidence in evidence_rows:
+                if (fact.id, evidence.id) in existing_links:
+                    continue
                 self._session.add(
                     EventFactEvidence(
                         event_fact_id=fact.id,
@@ -75,6 +87,7 @@ class FactBuilder:
                         validator_version=VALIDATOR_VERSION,
                     )
                 )
+                existing_links.add((fact.id, evidence.id))
         self._session.flush()
         validator = FactValidator(self._session)
         facts = list(

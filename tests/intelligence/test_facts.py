@@ -4,7 +4,7 @@ from sqlalchemy import delete, select
 
 from app.intelligence.facts import FactBuilder, FactValidator
 from app.models.enums import Source
-from app.models.tables import EventFactEvidence
+from app.models.tables import EventClusterItem, EventEvidence, EventFactEvidence
 from tests.intelligence.helpers import EvidenceSpec, seed_event
 
 
@@ -61,3 +61,32 @@ def test_geeknews_private_summary_never_enters_fact_text(db_session) -> None:
 
     assert all("do not redistribute" not in fact.text for fact in facts)
     assert db_session.scalars(select(EventFactEvidence)).all()
+
+
+def test_late_evidence_enriches_facts_without_rewriting_existing_fact(db_session) -> None:
+    event = seed_event(
+        db_session,
+        [EvidenceSpec(Source.GITHUB_RELEASES, "Agent SDK v2.0 released")],
+        suffix="late-primary",
+    )
+    original = FactBuilder(db_session).build(event.id)
+    original_ids = {fact.id for fact in original}
+    late = seed_event(
+        db_session,
+        [EvidenceSpec(Source.OFFICIAL_AWS, "AWS supports Agent SDK v2.0")],
+        suffix="late-secondary",
+    )
+    for row in db_session.scalars(
+        select(EventClusterItem).where(EventClusterItem.event_cluster_id == late.id)
+    ):
+        row.event_cluster_id = event.id
+    for row in db_session.scalars(
+        select(EventEvidence).where(EventEvidence.event_cluster_id == late.id)
+    ):
+        row.event_cluster_id = event.id
+    db_session.flush()
+
+    enriched = FactBuilder(db_session).build(event.id)
+
+    assert original_ids <= {fact.id for fact in enriched}
+    assert any(fact.text == "AWS supports Agent SDK v2.0" for fact in enriched)
