@@ -54,6 +54,7 @@ class WikimediaTopPagesCollector:
             items=items,
             collector_version=self.collector_version,
             parser_version=self.parser_version,
+            coverage_complete=True,
         )
 
     def _parse(self, raw_bytes: bytes, observed_at: datetime, source_url: str) -> list[SourceItem]:

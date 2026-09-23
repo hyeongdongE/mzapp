@@ -105,3 +105,16 @@ SOURCE_REGISTRY: dict[Source, SourceDefinition] = {
 
 def required_source_keys() -> tuple[Source, ...]:
     return tuple(definition.source for definition in SOURCE_REGISTRY.values() if definition.enabled)
+
+
+def required_source_health_keys(
+    github_repositories: tuple[str, ...],
+) -> tuple[tuple[Source, str], ...]:
+    keys: list[tuple[Source, str]] = []
+    for source in required_source_keys():
+        if source is Source.GITHUB_RELEASES:
+            repositories = github_repositories or ("default",)
+            keys.extend((source, repository) for repository in repositories)
+        else:
+            keys.append((source, "default"))
+    return tuple(keys)

@@ -19,10 +19,12 @@ AUTHORITY = {
     EvidenceKind.EARLY_SIGNAL: 0.25,
 }
 IMPORTANCE_SIGNALS = {
+    "announces": 15.0,
     "breaking": 20.0,
     "critical": 25.0,
     "deprecated": 20.0,
     "launch": 20.0,
+    "introducing": 15.0,
     "model": 10.0,
     "outage": 25.0,
     "pricing": 15.0,
@@ -51,9 +53,6 @@ class AssessmentService:
                 EventAssessment.assessment_version == version,
             )
         )
-        if existing is not None:
-            return _result(existing)
-
         cluster = self._session.get(EventCluster, event_id)
         if cluster is None:
             raise ValueError("event does not exist")
@@ -67,16 +66,17 @@ class AssessmentService:
         ).all()
         confidence, confidence_breakdown = _confidence(rows, cluster.status)
         importance, importance_breakdown = _importance([item for _, item in rows])
-        assessment = EventAssessment(
+        assessment = existing or EventAssessment(
             event_cluster_id=event_id,
-            confidence=confidence,
-            confidence_breakdown=confidence_breakdown,
-            importance=importance,
-            importance_breakdown=importance_breakdown,
             assessment_version=version,
-            assessed_at=datetime.now(UTC),
         )
-        self._session.add(assessment)
+        assessment.confidence = confidence
+        assessment.confidence_breakdown = confidence_breakdown
+        assessment.importance = importance
+        assessment.importance_breakdown = importance_breakdown
+        assessment.assessed_at = datetime.now(UTC)
+        if existing is None:
+            self._session.add(assessment)
         self._session.flush()
         return EventAssessmentResult(
             confidence,
@@ -143,6 +143,9 @@ def _importance(
     text = " ".join(titles)
     matched = sorted(signal for signal in IMPORTANCE_SIGNALS if signal in text)
     signal_score = sum(IMPORTANCE_SIGNALS[signal] for signal in matched)
+    if any(item.item_metadata.get("release_tag") for item in items):
+        matched.append("release_metadata")
+        signal_score += 15.0
     score = min(100.0, 10.0 + signal_score)
     return score, {
         "base_score": 10.0,

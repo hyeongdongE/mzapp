@@ -46,6 +46,7 @@ class GeekNewsAtomCollector:
             items=parse_geeknews_atom(raw_bytes, collected_at, self._url),
             collector_version=self.collector_version,
             parser_version=self.parser_version,
+            coverage_complete=True,
         )
 
 

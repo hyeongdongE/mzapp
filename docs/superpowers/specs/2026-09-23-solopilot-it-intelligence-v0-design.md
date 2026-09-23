@@ -251,7 +251,8 @@ Proposed configurable schedule:
 
 - collectors: every 15 minutes, with per-source backoff and health recording;
 - event processing: after successful collection batches;
-- daily window close/ranking: 07:30 Asia/Seoul;
+- daily window close: 07:30 Asia/Seoul;
+- ranking/generation: 07:35, after the 07:30 collection and 07:32 processing jobs complete;
 - synthesis and quality gate: 07:45;
 - publish: 08:00.
 

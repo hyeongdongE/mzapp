@@ -33,6 +33,10 @@ class HttpRequestFailed(CollectorError):
         super().__init__(f"official source request failed ({code})")
 
 
+class IncompleteCoverage(CollectorError):
+    code = "INCOMPLETE_COVERAGE"
+
+
 @dataclass(frozen=True)
 class SourceItem:
     source_item_id: str
@@ -57,6 +61,7 @@ class CollectionBatch:
     items: list[SourceItem]
     collector_version: str
     parser_version: str
+    coverage_complete: bool = False
 
 
 class Collector(Protocol):

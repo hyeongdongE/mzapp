@@ -6,8 +6,9 @@ import pytest
 from sqlalchemy import func, select
 
 from app.collectors.base import CollectionBatch, SourceItem
-from app.models.enums import Source
+from app.models.enums import EvidenceConfidence, Source
 from app.models.tables import (
+    EventAssessment,
     EventCluster,
     EventClusterItem,
     EventEntityLink,
@@ -16,6 +17,7 @@ from app.models.tables import (
 )
 from app.services.event_processing import EventProcessingService
 from app.services.intelligence_collection import IntelligenceCollectionService
+from app.services.intelligence_scheduler import IntelligencePipeline
 
 AS_OF = datetime(2026, 9, 23, 3, 0, tzinfo=UTC)
 
@@ -34,6 +36,7 @@ class EventCollector:
             items=[self._item],
             collector_version="fixture-v1",
             parser_version="fixture-parser-v1",
+            coverage_complete=True,
         )
 
 
@@ -110,3 +113,58 @@ async def test_event_processing_is_replay_safe_for_already_assigned_items(db_ses
 
     assert first.assigned_items == 1
     assert second.assigned_items == 0
+
+
+@pytest.mark.asyncio
+async def test_late_matching_item_enriches_existing_cluster(db_session) -> None:
+    pipeline = IntelligencePipeline(db_session, now=lambda: AS_OF)
+    await IntelligenceCollectionService(db_session, now=lambda: AS_OF).run(
+        EventCollector(
+            Source.GITHUB_RELEASES,
+            source_item(
+                Source.GITHUB_RELEASES,
+                1,
+                "Acme Agent SDK 2.0 released",
+                "https://github.com/acme/agent-sdk/releases/tag/v2.0.0",
+            ),
+        ),
+        as_of=AS_OF,
+        run_key="github:initial",
+    )
+    first = pipeline.process(
+        AS_OF - timedelta(days=1),
+        AS_OF + timedelta(minutes=1),
+        version="cluster-v1",
+        assessment_version="assessment-v1",
+    )
+
+    await IntelligenceCollectionService(db_session, now=lambda: AS_OF).run(
+        EventCollector(
+            Source.HACKER_NEWS,
+            source_item(
+                Source.HACKER_NEWS,
+                2,
+                "Acme Agent SDK v2.0 is out",
+                "https://news.ycombinator.com/item?id=2",
+            ),
+        ),
+        as_of=AS_OF,
+        run_key="hn:late",
+    )
+    second = pipeline.process(
+        AS_OF - timedelta(days=1),
+        AS_OF + timedelta(minutes=1),
+        version="cluster-v1",
+        assessment_version="assessment-v1",
+    )
+
+    assert first.created_clusters == 1
+    assert second.created_clusters == 0
+    assert second.cluster_ids == first.cluster_ids
+    assert db_session.scalar(select(func.count()).select_from(EventCluster)) == 1
+    assert db_session.scalar(select(func.count()).select_from(EventClusterItem)) == 2
+    assert db_session.scalar(select(func.count()).select_from(EventEvidence)) == 2
+    assessment = db_session.scalar(select(EventAssessment))
+    assert assessment is not None
+    assert assessment.confidence is EvidenceConfidence.STRONG
+    assert assessment.confidence_breakdown["independent_evidence_count"] == 2.0

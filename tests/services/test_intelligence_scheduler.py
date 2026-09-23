@@ -27,9 +27,10 @@ def test_intelligence_scheduler_registers_stable_seoul_jobs() -> None:
     assert set(jobs) == {
         "intelligence-collect-15m",
         "intelligence-process-15m",
-        "intelligence-generate-0730",
+        "intelligence-generate-0735",
         "intelligence-publish-0800",
     }
     assert all(job.coalesce is True for job in jobs.values())
     assert all(job.max_instances == 1 for job in jobs.values())
     assert all(str(job.trigger.timezone) == "Asia/Seoul" for job in jobs.values())
+    assert "hour='7', minute='35'" in str(jobs["intelligence-generate-0735"].trigger)

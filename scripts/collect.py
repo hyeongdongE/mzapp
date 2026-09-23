@@ -123,16 +123,27 @@ async def collect(
             instance_key = f":{collection_key}" if collection_key else ""
             run_key = f"{collector.source.value.lower()}{instance_key}:{logical_key}"
             with session_scope() as session:
-                if collector.source in {Source.GOOGLE_TRENDS, Source.WIKIMEDIA}:
-                    result = await CollectionService(session).run(
-                        collector, as_of=as_of, run_key=run_key
+                try:
+                    if collector.source in {Source.GOOGLE_TRENDS, Source.WIKIMEDIA}:
+                        result = await CollectionService(session).run(
+                            collector, as_of=as_of, run_key=run_key
+                        )
+                        item_count = result.inserted_observations
+                    else:
+                        result = await IntelligenceCollectionService(session).run(
+                            collector, as_of=as_of, run_key=run_key
+                        )
+                        item_count = result.inserted_raw_items
+                except CollectorError as exc:
+                    outputs.append(
+                        {
+                            "source": collector.source.value,
+                            "run_id": 0,
+                            "items": 0,
+                            "error": exc.code,
+                        }
                     )
-                    item_count = result.inserted_observations
-                else:
-                    result = await IntelligenceCollectionService(session).run(
-                        collector, as_of=as_of, run_key=run_key
-                    )
-                    item_count = result.inserted_raw_items
+                    continue
                 outputs.append(
                     {
                         "source": collector.source.value,
@@ -165,15 +176,16 @@ def main() -> None:
     args = parser.parse_args()
     if args.date is not None and args.source not in {"wikimedia", "legacy-all"}:
         parser.error("--date requires --source wikimedia or legacy-all")
-    try:
-        outputs = asyncio.run(collect(args.source, parse_as_of(args.as_of), target_date=args.date))
-    except CollectorError as exc:
-        parser.exit(1, f"collection failed: {exc.code}\n")
+    outputs = asyncio.run(collect(args.source, parse_as_of(args.as_of), target_date=args.date))
     for output in outputs:
+        error = output.get("error")
         print(
             f"source={output['source']} run_id={output['run_id']} "
-            f"items={output['items']}"
+            f"items={output['items']} status={'failed' if error else 'ok'} "
+            f"error={error or '-'}"
         )
+    if any(output.get("error") for output in outputs):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

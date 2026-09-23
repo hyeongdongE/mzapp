@@ -586,6 +586,7 @@ class SourceHealth(Base):
     __tablename__ = "source_health"
 
     source: Mapped[Source] = mapped_column(enum_column(Source), primary_key=True)
+    collector_key: Mapped[str] = mapped_column(String(240), primary_key=True, default="default")
     last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_failure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

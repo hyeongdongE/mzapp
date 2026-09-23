@@ -21,6 +21,13 @@ def upgrade() -> None:
     op.create_table(
         "source_health",
         sa.Column("source", sa.String(length=64), primary_key=True),
+        sa.Column(
+            "collector_key",
+            sa.String(length=240),
+            primary_key=True,
+            nullable=False,
+            server_default="default",
+        ),
         sa.Column("last_attempt_at", sa.DateTime(timezone=True)),
         sa.Column("last_success_at", sa.DateTime(timezone=True)),
         sa.Column("last_failure_at", sa.DateTime(timezone=True)),

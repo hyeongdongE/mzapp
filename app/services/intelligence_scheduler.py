@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.base import BaseScheduler
@@ -10,7 +10,11 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
 
 from app.collectors.base import Collector, CollectorError
+from app.intelligence.assessment import AssessmentService
+from app.intelligence.facts import FactBuilder
 from app.models.enums import Source
+from app.services.daily_brief import DailyBriefResult, DailyBriefService
+from app.services.event_processing import EventProcessingResult, EventProcessingService
 from app.services.intelligence_collection import IntelligenceCollectionService
 
 SEOUL = ZoneInfo("Asia/Seoul")
@@ -43,8 +47,8 @@ def configure_intelligence_scheduler(
     )
     scheduler.add_job(
         actions.generate,
-        CronTrigger(hour=7, minute=30, timezone=SEOUL),
-        id="intelligence-generate-0730",
+        CronTrigger(hour=7, minute=35, timezone=SEOUL),
+        id="intelligence-generate-0735",
         **common,
     )
     scheduler.add_job(
@@ -71,9 +75,11 @@ class IntelligencePipeline:
         session: Session,
         *,
         now: Callable[[], datetime] | None = None,
+        github_repositories: tuple[str, ...] | None = None,
     ) -> None:
         self._session = session
         self._now = now or (lambda: datetime.now(UTC))
+        self._github_repositories = github_repositories
 
     async def collect(
         self,
@@ -86,7 +92,12 @@ class IntelligencePipeline:
         for collector in collectors:
             index = source_counts.get(collector.source, 0)
             source_counts[collector.source] = index + 1
-            suffix = f":{index}" if index else ""
+            collection_key = getattr(collector, "collection_key", None)
+            suffix = (
+                f":{collection_key}"
+                if collection_key
+                else (f":{index}" if index else "")
+            )
             run_key = (
                 f"intelligence:{collector.source.value.lower()}{suffix}:"
                 f"{as_of:%Y%m%dT%H%M%SZ}"
@@ -116,3 +127,52 @@ class IntelligencePipeline:
                 )
             )
         return results
+
+    def process(
+        self,
+        window_start: datetime,
+        window_end: datetime,
+        *,
+        version: str,
+        assessment_version: str,
+    ) -> EventProcessingResult:
+        result = EventProcessingService(self._session, now=self._now).process_window(
+            window_start,
+            window_end,
+            version=version,
+        )
+        for event_id in result.cluster_ids:
+            FactBuilder(self._session).build(event_id)
+            AssessmentService(self._session).assess(
+                event_id,
+                version=assessment_version,
+            )
+        return result
+
+    def generate(
+        self,
+        brief_date: date,
+        *,
+        now: datetime,
+        version: str,
+    ) -> DailyBriefResult:
+        return DailyBriefService(
+            self._session,
+            github_repositories=self._github_repositories,
+        ).generate(
+            brief_date,
+            now=now,
+            version=version,
+        )
+
+    def publish(
+        self,
+        brief_date: date,
+        *,
+        now: datetime,
+        recovery_version: str | None = None,
+    ) -> DailyBriefResult:
+        return DailyBriefService(
+            self._session,
+            github_repositories=self._github_repositories,
+        ).publish(brief_date, now=now, recovery_version=recovery_version)

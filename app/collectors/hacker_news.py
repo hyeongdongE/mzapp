@@ -73,6 +73,7 @@ class HackerNewsCollector:
             items=items,
             collector_version=self.collector_version,
             parser_version=self.parser_version,
+            coverage_complete=len(raw_items) == len(requested_ids),
         )
 
 

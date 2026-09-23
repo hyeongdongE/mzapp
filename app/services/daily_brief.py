@@ -7,9 +7,10 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.config.settings import get_settings
 from app.intelligence.briefs import BriefCandidate, BriefSelector
 from app.intelligence.reading_time import ReadingTimeEstimator
-from app.intelligence.sources import required_source_keys
+from app.intelligence.sources import required_source_health_keys
 from app.intelligence.synthesis import BriefDraftContent, EvidenceOnlySynthesizer
 from app.models.enums import BriefStatus, ClusterStatus, EvidenceConfidence
 from app.models.tables import (
@@ -41,8 +42,18 @@ class DailyBriefResult:
 
 
 class DailyBriefService:
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        github_repositories: tuple[str, ...] | None = None,
+    ) -> None:
         self._session = session
+        self._github_repositories = (
+            github_repositories
+            if github_repositories is not None
+            else get_settings().github_release_repositories
+        )
         self._estimator = ReadingTimeEstimator()
         self._selector = BriefSelector(self._estimator)
         self._synthesizer = EvidenceOnlySynthesizer(session)
@@ -87,13 +98,9 @@ class DailyBriefService:
             status = BriefStatus.REJECTED
             published_at = None
             selected = selection.items
-        elif len(selection.items) <= 2:
-            status = BriefStatus.LOW_SIGNAL_DAY
-            published_at = now
-            selected = selection.items
         else:
-            status = BriefStatus.PUBLISHED
-            published_at = now
+            status = BriefStatus.DRAFT
+            published_at = None
             selected = selection.items
 
         final_text = "\n".join(
@@ -137,9 +144,63 @@ class DailyBriefService:
         self._session.flush()
         return _result(brief)
 
+    def publish(
+        self,
+        brief_date: date,
+        *,
+        now: datetime,
+        recovery_version: str | None = None,
+    ) -> DailyBriefResult:
+        if recovery_version is not None:
+            recovered = self.generate(
+                brief_date,
+                now=now,
+                version=recovery_version,
+            )
+            if recovered.status is not BriefStatus.DRAFT:
+                return recovered
+        brief = self._session.scalar(
+            select(DailyBrief)
+            .where(
+                DailyBrief.brief_date == brief_date,
+                DailyBrief.status == BriefStatus.DRAFT,
+            )
+            .order_by(DailyBrief.version.desc())
+            .limit(1)
+        )
+        if brief is None:
+            existing = self._session.scalar(
+                select(DailyBrief)
+                .where(DailyBrief.brief_date == brief_date)
+                .order_by(DailyBrief.version.desc())
+                .limit(1)
+            )
+            if existing is None:
+                raise ValueError("draft brief does not exist")
+            return _result(existing)
+        if not self._coverage_is_complete(_aware_utc(brief.window_end)):
+            brief.status = BriefStatus.DEGRADED_SOURCE_COVERAGE
+        elif brief.reading_time_seconds > 300 or not self._snapshots_are_publishable(
+            brief.id
+        ):
+            brief.status = BriefStatus.REJECTED
+        elif brief.selected_count <= 2:
+            brief.status = BriefStatus.LOW_SIGNAL_DAY
+        elif brief.selected_count <= 7:
+            brief.status = BriefStatus.PUBLISHED
+        else:
+            brief.status = BriefStatus.REJECTED
+        brief.published_at = (
+            now if brief.status in {BriefStatus.PUBLISHED, BriefStatus.LOW_SIGNAL_DAY} else None
+        )
+        self._session.flush()
+        return _result(brief)
+
     def _coverage_is_complete(self, window_end: datetime) -> bool:
-        for source in required_source_keys():
-            health = self._session.get(SourceHealth, source)
+        for source, collector_key in required_source_health_keys(
+            self._github_repositories
+        ):
+            health = self._session.get(SourceHealth, (source, collector_key))
             if (
                 health is None
                 or health.last_success_at is None
@@ -150,6 +211,46 @@ class DailyBriefService:
             ):
                 return False
         return True
+
+    def _snapshots_are_publishable(self, brief_id: int) -> bool:
+        item_count = int(
+            self._session.scalar(
+                select(func.count())
+                .select_from(BriefItem)
+                .where(BriefItem.brief_id == brief_id)
+            )
+            or 0
+        )
+        if item_count == 0:
+            return True
+        invalid = int(
+            self._session.scalar(
+                select(func.count())
+                .select_from(BriefItemFact)
+                .join(EventFact, EventFact.id == BriefItemFact.event_fact_id)
+                .join(
+                    EventEvidence,
+                    EventEvidence.id == BriefItemFact.event_evidence_id,
+                )
+                .join(BriefItem, BriefItem.id == BriefItemFact.brief_item_id)
+                .where(
+                    BriefItem.brief_id == brief_id,
+                    (EventFact.publishable.is_(False))
+                    | (EventEvidence.publishable.is_(False)),
+                )
+            )
+            or 0
+        )
+        snapshot_count = int(
+            self._session.scalar(
+                select(func.count())
+                .select_from(BriefItemFact)
+                .join(BriefItem, BriefItem.id == BriefItemFact.brief_item_id)
+                .where(BriefItem.brief_id == brief_id)
+            )
+            or 0
+        )
+        return invalid == 0 and snapshot_count > 0
 
     def _candidates(
         self,
@@ -162,7 +263,12 @@ class DailyBriefService:
             self._session.scalars(
                 select(BriefItem.event_cluster_id)
                 .join(DailyBrief, DailyBrief.id == BriefItem.brief_id)
-                .where(DailyBrief.brief_date < brief_date)
+                .where(
+                    DailyBrief.brief_date < brief_date,
+                    DailyBrief.status.in_(
+                        (BriefStatus.PUBLISHED, BriefStatus.LOW_SIGNAL_DAY)
+                    ),
+                )
             ).all()
         )
         assessments: dict[int, EventAssessment] = {}
@@ -277,9 +383,15 @@ class DailyBriefService:
             if fact is None:
                 continue
             evidence_ids = self._session.scalars(
-                select(EventFactEvidence.event_evidence_id).where(
+                select(EventFactEvidence.event_evidence_id)
+                .join(
+                    EventEvidence,
+                    EventEvidence.id == EventFactEvidence.event_evidence_id,
+                )
+                .where(
                     EventFactEvidence.event_fact_id == fact_id,
                     EventFactEvidence.validation_result == "SUPPORTED",
+                    EventEvidence.publishable.is_(True),
                 )
             )
             for evidence_id in evidence_ids:

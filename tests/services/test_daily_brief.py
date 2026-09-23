@@ -4,9 +4,10 @@ from datetime import UTC, date, datetime
 
 from sqlalchemy import func, select
 
+from app.config.settings import get_settings
 from app.intelligence.assessment import AssessmentService
 from app.intelligence.facts import FactBuilder
-from app.intelligence.sources import required_source_keys
+from app.intelligence.sources import required_source_health_keys
 from app.models.enums import BriefStatus, Source
 from app.models.tables import BriefItem, BriefItemFact, DailyBrief, SourceHealth
 from app.services.daily_brief import DailyBriefService
@@ -18,7 +19,9 @@ WINDOW_END = datetime(2026, 9, 23, 22, 30, tzinfo=UTC)
 
 
 def seed_health(db_session, *, stale_source: Source | None = None) -> None:
-    for source in required_source_keys():
+    for source, collector_key in required_source_health_keys(
+        get_settings().github_release_repositories
+    ):
         covered_through = (
             datetime(2026, 9, 23, 0, 0, tzinfo=UTC)
             if source is stale_source
@@ -27,6 +30,7 @@ def seed_health(db_session, *, stale_source: Source | None = None) -> None:
         db_session.add(
             SourceHealth(
                 source=source,
+                collector_key=collector_key,
                 last_attempt_at=GENERATION_TIME,
                 last_success_at=GENERATION_TIME,
                 last_failure_at=None,
@@ -39,9 +43,9 @@ def seed_health(db_session, *, stale_source: Source | None = None) -> None:
     db_session.flush()
 
 
-def seed_qualifying_events(db_session, count: int) -> list[int]:
+def seed_qualifying_events(db_session, count: int, *, start: int = 1) -> list[int]:
     event_ids = []
-    for index in range(1, count + 1):
+    for index in range(start, start + count):
         event = seed_event(
             db_session,
             [
@@ -74,9 +78,14 @@ def test_healthy_sources_allow_two_item_low_signal_brief(db_session) -> None:
         BRIEF_DATE, now=GENERATION_TIME, version="brief-v1"
     )
 
-    assert result.status is BriefStatus.LOW_SIGNAL_DAY
+    assert result.status is BriefStatus.DRAFT
     assert result.item_count == 2
-    assert result.published_at == GENERATION_TIME
+    assert result.published_at is None
+
+    published = DailyBriefService(db_session).publish(BRIEF_DATE, now=GENERATION_TIME)
+
+    assert published.status is BriefStatus.LOW_SIGNAL_DAY
+    assert published.published_at == GENERATION_TIME
 
 
 def test_stale_required_source_blocks_publication(db_session) -> None:
@@ -100,7 +109,7 @@ def test_normal_brief_snapshots_exact_fact_and_evidence_pairs(db_session) -> Non
         BRIEF_DATE, now=GENERATION_TIME, version="brief-v1"
     )
 
-    assert result.status is BriefStatus.PUBLISHED
+    assert result.status is BriefStatus.DRAFT
     assert 3 <= result.item_count <= 7
     assert result.reading_time_seconds <= 300
     assert db_session.scalar(select(func.count()).select_from(BriefItemFact)) > 0
@@ -142,8 +151,11 @@ def test_already_briefed_event_is_suppressed_from_next_window(db_session) -> Non
     service = DailyBriefService(db_session)
     first = service.generate(BRIEF_DATE, now=GENERATION_TIME, version="brief-v1")
     assert first.item_count == 1
+    service.publish(BRIEF_DATE, now=GENERATION_TIME)
 
     next_date = date(2026, 9, 25)
+    for item in event_ids_raw_items(db_session, event_ids[0]):
+        item.published_at = datetime(2026, 9, 24, 12, 0, tzinfo=UTC)
     for health in db_session.scalars(select(SourceHealth)):
         health.covered_through = datetime(2026, 9, 24, 22, 30, tzinfo=UTC)
     second = service.generate(
@@ -158,6 +170,27 @@ def test_already_briefed_event_is_suppressed_from_next_window(db_session) -> Non
             BriefItem.event_cluster_id == event_ids[0]
         )
     ) == 1
+
+
+def test_unpublished_brief_does_not_suppress_event_from_next_window(db_session) -> None:
+    seed_health(db_session)
+    event_ids = seed_qualifying_events(db_session, 1)
+    service = DailyBriefService(db_session)
+    first = service.generate(BRIEF_DATE, now=GENERATION_TIME, version="brief-v1")
+    assert first.status is BriefStatus.DRAFT
+    for item in event_ids_raw_items(db_session, event_ids[0]):
+        item.published_at = datetime(2026, 9, 24, 12, 0, tzinfo=UTC)
+    for health in db_session.scalars(select(SourceHealth)):
+        health.covered_through = datetime(2026, 9, 24, 22, 30, tzinfo=UTC)
+
+    second = service.generate(
+        date(2026, 9, 25),
+        now=datetime(2026, 9, 25, 0, 0, tzinfo=UTC),
+        version="brief-v1",
+    )
+
+    assert second.status is BriefStatus.DRAFT
+    assert second.item_count == 1
 
 
 def test_old_backfill_is_excluded_even_when_first_seen_is_recent(db_session) -> None:
@@ -178,7 +211,84 @@ def test_old_backfill_is_excluded_even_when_first_seen_is_recent(db_session) -> 
     )
 
     assert result.item_count == 0
-    assert result.status is BriefStatus.LOW_SIGNAL_DAY
+    assert result.status is BriefStatus.DRAFT
+
+
+def test_publish_rejects_snapshot_with_withdrawn_evidence(db_session) -> None:
+    seed_health(db_session)
+    seed_qualifying_events(db_session, 3)
+    service = DailyBriefService(db_session)
+    generated = service.generate(BRIEF_DATE, now=GENERATION_TIME, version="brief-v1")
+    snapshot = db_session.scalar(select(BriefItemFact))
+    assert snapshot is not None
+    from app.models.tables import EventEvidence
+
+    evidence = db_session.get(EventEvidence, snapshot.event_evidence_id)
+    assert evidence is not None
+    evidence.publishable = False
+
+    published = service.publish(BRIEF_DATE, now=GENERATION_TIME)
+
+    assert generated.status is BriefStatus.DRAFT
+    assert published.status is BriefStatus.REJECTED
+    assert published.published_at is None
+
+
+def test_publish_is_idempotent_after_success(db_session) -> None:
+    seed_health(db_session)
+    seed_qualifying_events(db_session, 3)
+    service = DailyBriefService(db_session)
+    service.generate(BRIEF_DATE, now=GENERATION_TIME, version="brief-v1")
+
+    first = service.publish(BRIEF_DATE, now=GENERATION_TIME)
+    second = service.publish(
+        BRIEF_DATE,
+        now=datetime(2026, 9, 24, 0, 1, tzinfo=UTC),
+    )
+
+    assert second.brief_id == first.brief_id
+    assert second.status is BriefStatus.PUBLISHED
+    assert second.published_at == first.published_at
+
+
+def test_publish_recovers_from_early_degraded_generation(db_session) -> None:
+    seed_health(db_session, stale_source=Source.HACKER_NEWS)
+    seed_qualifying_events(db_session, 3)
+    service = DailyBriefService(db_session)
+    early = service.generate(BRIEF_DATE, now=GENERATION_TIME, version="brief-v1")
+    for health in db_session.scalars(select(SourceHealth)):
+        health.covered_through = WINDOW_END
+        health.freshness_state = "FRESH"
+        health.consecutive_failures = 0
+
+    recovered = service.publish(
+        BRIEF_DATE,
+        now=datetime(2026, 9, 23, 23, 0, tzinfo=UTC),
+        recovery_version="brief-v1-publish",
+    )
+
+    assert early.status is BriefStatus.DEGRADED_SOURCE_COVERAGE
+    assert recovered.status is BriefStatus.PUBLISHED
+    assert recovered.item_count == 3
+
+
+def test_publish_regenerates_latest_snapshot_after_late_processing(db_session) -> None:
+    seed_health(db_session)
+    seed_qualifying_events(db_session, 1)
+    service = DailyBriefService(db_session)
+    early = service.generate(BRIEF_DATE, now=GENERATION_TIME, version="brief-v1")
+    seed_qualifying_events(db_session, 2, start=2)
+
+    final = service.publish(
+        BRIEF_DATE,
+        now=datetime(2026, 9, 23, 23, 0, tzinfo=UTC),
+        recovery_version="brief-v1-publish",
+    )
+
+    assert early.item_count == 1
+    assert final.version == 2
+    assert final.status is BriefStatus.PUBLISHED
+    assert final.item_count == 3
 
 
 def event_ids_raw_items(db_session, event_id: int):

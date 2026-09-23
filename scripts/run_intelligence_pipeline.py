@@ -9,8 +9,6 @@ import httpx
 from app.collectors.http import SafeHttpClient
 from app.config.settings import get_settings
 from app.db import session_scope
-from app.services.daily_brief import DailyBriefService
-from app.services.event_processing import EventProcessingService
 from app.services.intelligence_scheduler import IntelligencePipeline
 from scripts.collect import build_collectors
 
@@ -25,45 +23,58 @@ def parse_date(value: str) -> date:
 async def run(args: argparse.Namespace) -> None:
     settings = get_settings()
     now = datetime.now(UTC)
-    if args.collect:
-        async with httpx.AsyncClient() as client:
-            safe_http = SafeHttpClient(
-                client,
-                allowed_hosts={
-                    "news.hada.io",
-                    "hacker-news.firebaseio.com",
-                    "api.github.com",
-                    "blog.cloudflare.com",
-                    "aws.amazon.com",
-                },
-                max_bytes=settings.http_max_bytes,
-                retries=settings.http_retries,
-                timeout_seconds=settings.http_timeout_seconds,
-                user_agent=settings.user_agent,
+    with session_scope() as session:
+        pipeline = IntelligencePipeline(session)
+        if args.collect:
+            async with httpx.AsyncClient() as client:
+                safe_http = SafeHttpClient(
+                    client,
+                    allowed_hosts={
+                        "news.hada.io",
+                        "hacker-news.firebaseio.com",
+                        "api.github.com",
+                        "blog.cloudflare.com",
+                        "aws.amazon.com",
+                    },
+                    max_bytes=settings.http_max_bytes,
+                    retries=settings.http_retries,
+                    timeout_seconds=settings.http_timeout_seconds,
+                    user_agent=settings.user_agent,
+                )
+                collectors = build_collectors(
+                    "all", safe_http, settings, target_date=None
+                )
+                collection = await pipeline.collect(collectors, as_of=now)
+                for result in collection:
+                    print(
+                        f"collect source={result.source.value} "
+                        f"status={'ok' if result.succeeded else 'failed'} "
+                        f"raw_items={result.raw_item_count} "
+                        f"error={result.error_code or '-'}"
+                    )
+        if args.process:
+            processing = pipeline.process(
+                now - timedelta(days=2),
+                now,
+                version="cluster-v1",
+                assessment_version="assessment-v1",
             )
-            collectors = build_collectors(
-                "all", safe_http, settings, target_date=None
+            print(
+                f"process clusters={processing.created_clusters} "
+                f"items={processing.assigned_items} evidence={processing.created_evidence}"
             )
-            with session_scope() as session:
-                await IntelligencePipeline(session).collect(collectors, as_of=now)
-                if args.dry_run:
-                    session.rollback()
-    if args.process:
-        with session_scope() as session:
-            EventProcessingService(session).process_window(
-                now - timedelta(days=2), now, version="cluster-v1"
-            )
-            if args.dry_run:
-                session.rollback()
-    if args.brief_date is not None:
-        with session_scope() as session:
-            DailyBriefService(session).generate(
+        if args.brief_date is not None:
+            brief = pipeline.generate(
                 args.brief_date,
                 now=now,
                 version="brief-v1-dry-run" if args.dry_run else "brief-v1",
             )
-            if args.dry_run:
-                session.rollback()
+            print(
+                f"brief status={brief.status.value} items={brief.item_count} "
+                f"reading_seconds={brief.reading_time_seconds}"
+            )
+        if args.dry_run:
+            session.rollback()
 
 
 def main() -> None:

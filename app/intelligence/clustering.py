@@ -63,6 +63,7 @@ class EventClusterDraft:
     id: int
     members: list[ClusterItem] = field(default_factory=list)
     needs_review: bool = False
+    persisted: bool = False
 
     @property
     def source_count(self) -> int:
@@ -80,10 +81,24 @@ class ConservativeClusterer:
     def __init__(self, *, deduplicator: Deduplicator | None = None) -> None:
         self._deduplicator = deduplicator or Deduplicator()
 
-    def process(self, items: list[ClusterItem]) -> ClusteringResult:
-        clusters: list[EventClusterDraft] = []
+    def process(
+        self,
+        items: list[ClusterItem],
+        *,
+        existing_clusters: tuple[EventClusterDraft, ...] = (),
+    ) -> ClusteringResult:
+        clusters = [
+            EventClusterDraft(
+                id=cluster.id,
+                members=list(cluster.members),
+                needs_review=cluster.needs_review,
+                persisted=True,
+            )
+            for cluster in existing_clusters
+        ]
         decisions: list[ClusterDecision] = []
         incorrect_merges = 0
+        next_cluster_id = max((cluster.id for cluster in clusters), default=0) + 1
         for candidate in sorted(items, key=lambda item: item.id):
             merge = self._best_candidate(candidate, clusters, ClusterAction.MERGE)
             if merge is not None:
@@ -104,10 +119,11 @@ class ConservativeClusterer:
 
             review = self._best_candidate(candidate, clusters, ClusterAction.REVIEW)
             cluster = EventClusterDraft(
-                id=len(clusters) + 1,
+                id=next_cluster_id,
                 members=[candidate],
                 needs_review=review is not None,
             )
+            next_cluster_id += 1
             clusters.append(cluster)
             if review is None:
                 action = ClusterAction.NEW

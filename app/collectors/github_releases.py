@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from datetime import UTC, datetime
+from urllib.parse import urlparse
 
 from app.collectors.base import CollectionBatch, MalformedPayload, SourceItem
 from app.collectors.http import SafeHttpClient
@@ -27,7 +28,9 @@ class GitHubReleasesCollector:
             raise ValueError("repository must use owner/name")
         self._http = http
         self._repository = repository
-        self._url = f"{api_base_url.rstrip('/')}/repos/{owner}/{name}/releases"
+        self._url = (
+            f"{api_base_url.rstrip('/')}/repos/{owner}/{name}/releases?per_page=1"
+        )
         self._now = now or (lambda: datetime.now(UTC))
 
     @property
@@ -57,6 +60,7 @@ class GitHubReleasesCollector:
             items=items,
             collector_version=self.collector_version,
             parser_version=self.parser_version,
+            coverage_complete=True,
         )
 
 
@@ -69,6 +73,14 @@ def _parse_release(repository: str, payload: dict, observed_at: datetime) -> Sou
         isinstance(value, str) and value for value in (tag, url, published_raw)
     ):
         raise MalformedPayload("GitHub release identity is incomplete")
+    parsed_url = urlparse(url)
+    expected_prefix = f"/{repository.casefold()}/releases/"
+    if (
+        parsed_url.scheme != "https"
+        or parsed_url.hostname != "github.com"
+        or not parsed_url.path.casefold().startswith(expected_prefix)
+    ):
+        raise MalformedPayload("GitHub release URL is not trusted")
     try:
         published_at = datetime.fromisoformat(published_raw.replace("Z", "+00:00"))
     except ValueError as exc:

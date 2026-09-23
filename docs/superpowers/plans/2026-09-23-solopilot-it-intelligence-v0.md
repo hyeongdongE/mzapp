@@ -570,7 +570,7 @@ git commit -m "feat: generate gated daily intelligence briefs"
 **Interfaces:**
 - Consumes: `IntelligenceCollectionService`, `EventProcessingService`, and `DailyBriefService`.
 - Produces: `GET /api/public/today` and `GET /api/public/briefs/{brief_date}` for published/low-signal responses only.
-- Produces: scheduler jobs for 15-minute collection, processing, 07:30 ranking/generation, and 08:00 publication in `Asia/Seoul`.
+- Produces: scheduler jobs for 15-minute collection and processing, a 07:30 cutoff followed by 07:35 ranking/generation, and 08:00 publication in `Asia/Seoul`.
 
 - [ ] **Step 1: Write failing public API tests**
 

@@ -9,6 +9,11 @@ from pathlib import Path
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
+from app.db import session_scope
+from app.services.intelligence_scheduler import (
+    IntelligencePipeline,
+    IntelligenceSchedulerActions,
+)
 from app.services.scheduler import SEOUL, SchedulerActions, configure_scheduler
 from scripts.build_entities import build
 from scripts.collect import collect
@@ -59,6 +64,39 @@ def scheduled_actions(
             return
         weekly(week_number, poc_start, output_dir)
 
+    def collect_intelligence() -> None:
+        asyncio.run(collect("all", clock()))
+
+    def process_intelligence() -> None:
+        current = clock()
+        with session_scope() as session:
+            IntelligencePipeline(session, now=clock).process(
+                current - timedelta(days=2),
+                current,
+                version="cluster-v1",
+                assessment_version="assessment-v1",
+            )
+
+    def generate_intelligence() -> None:
+        current = clock()
+        brief_date = current.astimezone(SEOUL).date()
+        with session_scope() as session:
+            IntelligencePipeline(session, now=clock).generate(
+                brief_date,
+                now=current,
+                version="brief-v1",
+            )
+
+    def publish_intelligence() -> None:
+        current = clock()
+        brief_date = current.astimezone(SEOUL).date()
+        with session_scope() as session:
+            IntelligencePipeline(session, now=clock).publish(
+                brief_date,
+                now=current,
+                recovery_version="brief-v1-publish",
+            )
+
     return SchedulerActions(
         google=collect_google,
         wikimedia=collect_wikimedia,
@@ -66,6 +104,12 @@ def scheduled_actions(
         pipeline=run_pipeline,
         daily_evaluation=run_daily_evaluation,
         weekly_evaluation=run_weekly_evaluation,
+        intelligence=IntelligenceSchedulerActions(
+            collect=collect_intelligence,
+            process=process_intelligence,
+            generate=generate_intelligence,
+            publish=publish_intelligence,
+        ),
     )
 
 

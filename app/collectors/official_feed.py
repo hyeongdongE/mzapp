@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
+from urllib.parse import urlparse
 from xml.etree.ElementTree import ParseError
 
 from defusedxml import ElementTree
@@ -14,6 +15,10 @@ from app.models.enums import Source
 
 DC_CREATOR = "{http://purl.org/dc/elements/1.1/}creator"
 ALLOWED_SOURCES = frozenset({Source.OFFICIAL_CLOUDFLARE, Source.OFFICIAL_AWS})
+PUBLIC_ITEM_HOSTS = {
+    Source.OFFICIAL_CLOUDFLARE: frozenset({"blog.cloudflare.com"}),
+    Source.OFFICIAL_AWS: frozenset({"aws.amazon.com"}),
+}
 
 
 class OfficialFeedCollector:
@@ -44,13 +49,16 @@ class OfficialFeedCollector:
             collected_at=collected_at,
             request_url=self._url,
             raw_bytes=raw_bytes,
-            items=parse_official_feed(raw_bytes, collected_at),
+            items=parse_official_feed(raw_bytes, collected_at, source=self.source),
             collector_version=self.collector_version,
             parser_version=self.parser_version,
+            coverage_complete=True,
         )
 
 
-def parse_official_feed(raw_bytes: bytes, observed_at: datetime) -> list[SourceItem]:
+def parse_official_feed(
+    raw_bytes: bytes, observed_at: datetime, *, source: Source
+) -> list[SourceItem]:
     try:
         root = ElementTree.fromstring(raw_bytes, forbid_dtd=True, forbid_entities=True)
     except (ParseError, DefusedXmlException, ValueError) as exc:
@@ -63,6 +71,12 @@ def parse_official_feed(raw_bytes: bytes, observed_at: datetime) -> list[SourceI
         published_raw = (item.findtext("pubDate") or "").strip()
         if not title or not url or not guid or not published_raw:
             raise MalformedPayload("official RSS item is incomplete")
+        parsed_url = urlparse(url)
+        if (
+            parsed_url.scheme != "https"
+            or parsed_url.hostname not in PUBLIC_ITEM_HOSTS[source]
+        ):
+            raise MalformedPayload("official RSS item URL is not trusted")
         try:
             published_at = parsedate_to_datetime(published_raw).astimezone(UTC)
         except (TypeError, ValueError) as exc:
