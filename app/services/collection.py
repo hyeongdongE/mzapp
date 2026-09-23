@@ -150,6 +150,22 @@ class CollectionService:
             inserted_observations=inserted,
         )
 
+    def completed_result(self, source: Source, run_key: str) -> PersistResult | None:
+        run = self._repo.find_run(run_key)
+        if run is None or run.status is not RunStatus.SUCCEEDED:
+            return None
+        if run.source is not source:
+            raise ValueError("collection run key cannot be reused across sources")
+        fetch = self._repo.find_fetch(run.id)
+        if fetch is None:
+            raise RuntimeError("succeeded collection run is missing fetch provenance")
+        return PersistResult(
+            run_id=run.id,
+            payload_id=fetch.raw_payload_id,
+            fetch_id=fetch.id,
+            inserted_observations=0,
+        )
+
     def record_failure(
         self,
         source,

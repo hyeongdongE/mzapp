@@ -32,6 +32,13 @@ class IntelligenceCollectionService:
     async def run(
         self, collector: Collector, *, as_of: datetime, run_key: str
     ) -> IntelligencePersistResult:
+        completed = self._provenance.completed_result(collector.source, run_key)
+        if completed is not None:
+            return IntelligencePersistResult(
+                run_id=completed.run_id,
+                fetch_id=completed.fetch_id,
+                inserted_raw_items=0,
+            )
         started_at = self._now().astimezone(UTC)
         collector_key = str(getattr(collector, "collection_key", "default"))
         try:

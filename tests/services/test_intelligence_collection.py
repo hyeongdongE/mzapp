@@ -3,12 +3,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.collectors.base import CollectionBatch, CollectorError, SourceItem
 from app.intelligence.normalization import normalize_source_item
 from app.models.enums import Source
-from app.models.tables import RawFetch, RawItem, SourceHealth
+from app.models.tables import CollectionRun, RawFetch, RawItem, RawPayload, SourceHealth
 from app.services.intelligence_collection import IntelligenceCollectionService
 
 AS_OF = datetime(2026, 9, 23, 3, 0, tzinfo=UTC)
@@ -54,6 +54,21 @@ class FixedTimeCollector(FixtureCollector):
     async def collect(self, as_of: datetime) -> CollectionBatch:
         del as_of
         return await super().collect(AS_OF)
+
+
+class ChangingLiveCollector(FixtureCollector):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def collect(self, as_of: datetime) -> CollectionBatch:
+        self.calls += 1
+        batch = await super().collect(as_of)
+        return CollectionBatch(
+            **{
+                **batch.__dict__,
+                "raw_bytes": f"<feed snapshot='{self.calls}' />".encode(),
+            }
+        )
 
 
 def test_geeknews_normalization_does_not_publish_source_summary() -> None:
@@ -117,3 +132,31 @@ async def test_coverage_boundary_comes_from_fetch_time_not_caller_as_of(db_sessi
     health = db_session.get(SourceHealth, (Source.GEEKNEWS, "default"))
     assert health is not None
     assert health.covered_through == AS_OF.replace(tzinfo=None)
+
+
+@pytest.mark.asyncio
+async def test_successful_run_key_replay_does_not_refetch_mutable_live_source(
+    db_session,
+) -> None:
+    collector = ChangingLiveCollector()
+    service = IntelligenceCollectionService(db_session, now=lambda: AS_OF)
+
+    first = await service.run(
+        collector,
+        as_of=AS_OF,
+        run_key="geeknews:mutable-live-replay",
+    )
+    replay = await service.run(
+        collector,
+        as_of=AS_OF,
+        run_key="geeknews:mutable-live-replay",
+    )
+
+    assert replay.run_id == first.run_id
+    assert replay.fetch_id == first.fetch_id
+    assert replay.inserted_raw_items == 0
+    assert collector.calls == 1
+    assert db_session.scalar(select(func.count()).select_from(CollectionRun)) == 1
+    assert db_session.scalar(select(func.count()).select_from(RawFetch)) == 1
+    assert db_session.scalar(select(func.count()).select_from(RawPayload)) == 1
+    assert db_session.scalar(select(func.count()).select_from(RawItem)) == 1

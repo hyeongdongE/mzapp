@@ -39,37 +39,39 @@ Checked-in HTTP payload fixtures are passed through the production collectors an
 
 The 52-second result is below the five-minute hard gate; the gate is a maximum, not a requirement to add filler. Every selected item has source links and exact `BriefItemFact(event_fact_id, event_evidence_id)` snapshots.
 
-## Live GET-only validation
+## PostgreSQL production persistence validation
 
-Attempted command:
+An isolated PostgreSQL 16.15 container and named volume were used so the existing development database and volume were not modified. Both schema entry paths passed:
 
-```powershell
-.venv/Scripts/python.exe scripts/run_intelligence_pipeline.py --collect --process --brief-date 2026-09-23 --dry-run
-```
+- fresh Alembic apply from an empty database: `0001 → 0011`;
+- existing Trend Radar schema at `0010 → 0011`, with a pre-upgrade anonymous-user marker preserved and the new intelligence tables present.
 
-The configured-database attempt was interrupted after producing no CLI result. A timed Python stack dump located the wait in the PostgreSQL connection, after the GeekNews fetch/parser had completed; it was not an HTTP collector timeout.
+The production collectors and services then fetched live providers and persisted the results to PostgreSQL. A validation clock immediately after the next publication cutoff was injected for the final coverage-gate pass; source content and parsing remained live.
 
-The same production collectors and services were then run without durable writes against an in-memory database. The first run exposed a real `openai/codex` GitHub response above the 2 MB safety limit and correctly produced `DEGRADED_SOURCE_COVERAGE`. After bounding the 15-minute GitHub poll to the latest release, a fresh run produced:
-
-| Live metric | Observed result |
+| PostgreSQL/live metric | Observed result |
 | --- | ---: |
-| GeekNews | 50 RawItems |
-| Hacker News | 29 RawItems |
-| GitHub Releases | 1 + 1 RawItems; both configured repositories healthy |
-| Cloudflare Blog | 20 RawItems |
-| AWS News Blog | 20 RawItems |
-| Total RawItems | 121 |
-| EventClusters | 83 |
-| EventFacts | 257 |
-| Closed-window publication | `LOW_SIGNAL_DAY` |
-| Selected items / reading time | 0 / 0 seconds |
+| Initial enabled-source collection | 6 successful collector instances |
+| Initial RawItems | 121 |
+| Final RawItems after cutoff validation poll | 122 |
+| EventClusters | 118 |
+| EventFacts | 362 |
+| EventEvidence | 121 |
+| EventFactEvidence links | 367 |
+| Persisted DailyBrief status | `PUBLISHED` |
+| Persisted BriefItems | 3 |
+| BriefItemFact provenance links | 11 |
+| Final reading time | 60 seconds |
+| `/today` after PostgreSQL restart | `PUBLISHED`, 3 items, brief date `2026-09-23` |
 
-The zero-item result is not padded: collection occurred after the last 07:30 Seoul cutoff, and no event in that already-closed publication window met the gate. It demonstrates real provider collection, processing, coverage classification, and the low-signal publication path. A non-empty live three-to-seven-item brief cannot be claimed from this run; the deterministic recorded-payload E2E remains the evidence for the normal publication path. Durable validation against the configured PostgreSQL instance remains environment-blocked until that database accepts connections.
+The first exact-run replay exposed a real idempotency defect: the service fetched a mutable live payload before noticing that the run key had already succeeded. A regression test was written first, then the intelligence collection boundary was changed to return the immutable stored run/fetch result without refetching. Replaying the original six collector run keys then preserved exactly 6 collection runs, 6 raw fetches, 6 raw payloads, and 121 RawItems while reporting zero new items.
+
+The PostgreSQL container was restarted after publication. A new application process and session returned the same three-item published brief from `/today`, and all persisted counts remained unchanged.
 
 ## Final local verification
 
 - Ruff: all checks passed.
-- Backend: 343 passed, 15 skipped in 11.64 seconds. The skips are existing opt-in/environment integration tests.
+- Backend with PostgreSQL: 354 non-migration tests passed, including all opt-in PostgreSQL integration tests.
+- Alembic migration regression: five migration test files passed independently against fresh PostgreSQL databases (359 total backend tests across isolated database lifecycles).
 - Frontend: 3 files / 16 tests passed.
 - TypeScript typecheck: passed.
 - ESLint: passed.

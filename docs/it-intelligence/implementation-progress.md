@@ -29,9 +29,10 @@ Google Trends and Wikimedia remain in the source registry but are disabled for t
 
 - Golden Dataset: 50 items, zero known incorrect merges, zero duplicate escapes.
 - Recorded five-source E2E: passes through the production pipeline and publishes three items in 52 seconds of estimated reading time.
-- Live GET validation: all five source families and both configured GitHub repositories completed against an in-memory database; the already-closed window correctly published a zero-item `LOW_SIGNAL_DAY` rather than padding a brief.
+- Live PostgreSQL validation: all five source families and both configured GitHub repositories persisted through the production collector/service path; 122 RawItems produced 118 clusters, 362 facts, 121 evidence rows, and a three-item `PUBLISHED` brief returned by `/today` after PostgreSQL restart.
+- Exact collector replay is idempotent after a live mutable-payload regression was found and fixed with a test-first terminal-success short-circuit.
 - Backend, frontend, typecheck, lint, and build commands are recorded in `quality-evaluation.md` and the task ledger.
-- Durable live validation against the configured PostgreSQL URL remains incomplete because that database did not accept a connection. The in-memory live run is recorded separately and is not represented as a durable deployment check.
+- Fresh `0001 → 0011`, existing Trend Radar `0010 → 0011`, PostgreSQL integration, migration, persistence, restart, replay, and `/today` checks all pass in the isolated validation environment.
 
 ## Explicitly out of scope
 
