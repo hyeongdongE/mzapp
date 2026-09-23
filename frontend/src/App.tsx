@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { Bookmark, Compass, Home, Settings as SettingsIcon } from 'lucide-react'
+import { Bookmark, Newspaper, Radar, Settings as SettingsIcon } from 'lucide-react'
 
 import { api } from './api'
 import Onboarding from './pages/Onboarding'
@@ -9,6 +9,7 @@ import Explore from './pages/Explore'
 import Saved from './pages/Saved'
 import Settings from './pages/Settings'
 import TrendDetail from './pages/TrendDetail'
+import Today from './pages/Today'
 import type { CategoriesResponse, Category } from './types'
 
 interface AppContextValue {
@@ -26,16 +27,15 @@ export function useAppState(): AppContextValue {
 }
 
 function RootRedirect() {
-  const { interests } = useAppState()
-  return <Navigate replace to={interests.length ? '/feed' : '/onboarding'} />
+  return <Navigate replace to="/today" />
 }
 
 function BottomNav() {
   const location = useLocation()
   if (location.pathname === '/onboarding') return null
   const items = [
-    { to: '/feed', label: '홈', icon: Home },
-    { to: '/explore', label: '둘러보기', icon: Compass },
+    { to: '/today', label: 'Today', icon: Newspaper },
+    { to: '/radar', label: 'Radar', icon: Radar },
     { to: '/saved', label: '저장', icon: Bookmark },
     { to: '/settings', label: '설정', icon: SettingsIcon },
   ]
@@ -83,7 +83,7 @@ function Shell() {
   }, [])
 
   const state = useMemo(() => ({ catalog, interests, setInterests }), [catalog, interests])
-  if (loading) return <main className="state-page" aria-live="polite"><span className="radar-dot" />레이더를 준비하고 있어요.</main>
+  if (loading) return <main className="state-page" aria-live="polite"><span className="radar-dot" />SoloPilot을 준비하고 있어요.</main>
   if (error) return <main className="state-page"><h1>잠시 연결이 어렵습니다</h1><p>{error}</p><button onClick={() => window.location.reload()}>다시 시도</button></main>
 
   return (
@@ -93,8 +93,10 @@ function Shell() {
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/onboarding" element={<Onboarding />} />
+        <Route path="/today" element={<Today />} />
+        <Route path="/radar" element={<Explore />} />
         <Route path="/feed" element={<Feed />} />
-        <Route path="/explore" element={<Explore />} />
+        <Route path="/explore" element={<Navigate replace to="/radar" />} />
         <Route path="/trends/:id" element={<TrendDetail />} />
         <Route path="/saved" element={<Saved />} />
         <Route path="/settings" element={<Settings />} />

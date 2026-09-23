@@ -42,3 +42,36 @@ export interface TrendDetail extends TrendItem {
   why: string
   sources: Array<{ source: string; url: string; observedAt: string }>
 }
+
+export interface BriefSource {
+  title: string
+  url: string
+}
+
+export interface DailyBriefItem {
+  position: number
+  headline: string
+  category: string
+  whatHappened: string
+  whyItMatters: string
+  fact: string[]
+  interpretation: string
+  watch: string
+  sources: BriefSource[]
+  importance: number
+}
+
+export interface TodayBrief {
+  briefDate: string
+  status: 'PUBLISHED' | 'LOW_SIGNAL_DAY'
+  todayInOneLine: string | null
+  readingTimeSeconds: number
+  emptyStateMessage: string | null
+  statistics: {
+    rawItemCount: number
+    eventClusterCount: number
+    candidateCount: number
+    selectedCount: number
+  }
+  items: DailyBriefItem[]
+}

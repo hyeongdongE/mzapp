@@ -23,7 +23,7 @@ export default function TrendDetail() {
   }, [notice])
   if (!detail) return <main className="state-page" aria-live="polite">근거를 확인하는 중…</main>
   const sourcePath = (location.state as { from?: string } | null)?.from
-  const returnTo = sourcePath && ['/feed', '/explore', '/saved'].includes(sourcePath) ? sourcePath : '/feed'
+  const returnTo = sourcePath && ['/feed', '/explore', '/radar', '/saved'].includes(sourcePath) ? sourcePath : '/radar'
 
   async function toggleSave(current: Detail) {
     if (saved) await api.unsave(current.trendId)

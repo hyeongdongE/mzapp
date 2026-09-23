@@ -1,6 +1,6 @@
 {
-  "name": "MZ Radar",
-  "short_name": "MZ Radar",
+  "name": "SoloPilot",
+  "short_name": "SoloPilot",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#F7F7FA",

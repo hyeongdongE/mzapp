@@ -21,7 +21,7 @@ def create_app(
     if not is_local and resolved.dashboard_api_key is None:
         raise ValueError("public dashboard bind requires a dashboard API key")
 
-    created = FastAPI(title="AI Personal Trend Radar")
+    created = FastAPI(title="SoloPilot")
     created.state.settings = resolved
     static_path = Path(__file__).resolve().parent.parent / "dashboard" / "static"
     created.mount("/static", StaticFiles(directory=static_path), name="static")
