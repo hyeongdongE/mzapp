@@ -7,7 +7,7 @@
 
 ## 1. Purpose
 
-SoloPilot V0 answers one question: **what actually changed in the IT industry today?** It continuously collects a bounded set of IT sources, separates raw source records from their original fetch provenance, consolidates records that describe the same real-world event, validates the available evidence, and publishes a daily three-to-seven-item brief that can be read in at most five minutes.
+SoloPilot V0 answers one question: **what actually changed in the IT industry today?** It continuously collects a bounded set of IT sources, separates raw source records from their original fetch provenance, consolidates records that describe the same real-world event, validates the available evidence, and normally publishes a daily three-to-seven-item brief that can be read in at most five minutes. A healthy low-signal day may intentionally contain only one or two items.
 
 The first vertical slice must traverse this complete path with real data:
 
@@ -63,9 +63,11 @@ The previous Personal Automation repository at `C:\autoproject` has no commit, H
 
 All database changes in this slice are additive. Existing Google Trends, Wikimedia, trend scoring, feed, and product tables remain available. Google Trends and Wikimedia are registered as disabled-by-default sources for the new IT Intelligence pipeline; their old collector and replay code is not deleted.
 
-## 4. Source Registry and Policy
+## 4. Source Registry, Policy, and Health
 
-The registry is executable configuration, not documentation only. Each source entry defines:
+The registry is executable configuration, not documentation only. Static source definition/policy and mutable runtime health are separate models so that a transient outage can never rewrite collection or publication policy.
+
+`SourceDefinition` and its nested `SourcePolicy` define:
 
 - stable source key and display name;
 - source family and evidence class;
@@ -76,13 +78,14 @@ The registry is executable configuration, not documentation only. Each source en
 - allowed public fields;
 - polling interval and freshness expectation;
 - optional repository or feed allowlist;
-- last success/failure health state.
+
+`SourceHealth` is runtime state keyed by source and records last attempt, last success, last failure, consecutive failures, last error code, freshness state, and the most recent successfully covered interval. Collection updates health transactionally after each attempt. Policy configuration is changed only through versioned configuration or an explicit administrative action.
 
 Initial source state:
 
 | Source | Method | Default | Evidence class | Storage policy |
 |---|---|---:|---|---|
-| GeekNews | Published Atom/RSS feed | enabled | COMMUNITY | title, links, author, timestamps, bounded snippet/metadata; no full article |
+| GeekNews | Published Atom/RSS feed | enabled | COMMUNITY | title, attribution, links, author, timestamps, and operational metadata; public redistribution of GeekNews summary/snippet is false by default |
 | Hacker News | Public Firebase API | enabled | COMMUNITY | item fields and metrics; no linked-page body |
 | GitHub Releases | REST API, configured repositories only | enabled | DEVELOPER or OFFICIAL | release metadata and bounded release-note excerpt; no repository scraping |
 | Cloudflare Blog | Official RSS | enabled | PRIMARY/OFFICIAL | feed metadata and bounded excerpt; no full article |
@@ -122,6 +125,8 @@ Uniqueness is source-aware and idempotent. A replay may reproduce the same norma
 `Entity` remains distinct from an event. Existing `TrendEntity` assets may be adapted behind an event entity-link table rather than redefined destructively. Entity types are constrained to company, product, technology, project, model, framework, language, research, and person.
 
 `EventEvidence` links an event to a raw item and classifies it as `PRIMARY`, `OFFICIAL`, `DEVELOPER`, `COMMUNITY`, `SECONDARY`, or `EARLY_SIGNAL`. It preserves the source URL and the validated fact fields supported by that source.
+
+`EventFact` stores each publishable factual claim as a structured, independently validated unit. `EventFactEvidence` links every EventFact to one or more supporting `EventEvidence` rows and records support type, extracted source field, validation result, and validator version. A final Brief Item FACT is composed only from publishable EventFacts, and `BriefItemFact` snapshots the exact EventFact and EventEvidence identifiers used for that published version. This makes claim/fact-level provenance traceable after later source corrections.
 
 ### Scoring and publication layer
 
@@ -210,20 +215,37 @@ Specific names, dates, versions, prices, scores, and quantitative claims not pre
 
 Ranking runs only after confidence validation. It orders publishable events by importance and tie-breaks deterministically using confidence, recency, and stable event ID. It does not promote an unsupported event because of a high importance score.
 
-The candidate selector returns between three and seven items:
+Normal publication selects between three and seven items:
 
-- fewer than three qualifying events: do not publish; mark the brief `INSUFFICIENT_SIGNAL` for review;
 - three to seven qualifying events: publish all selected within the reading-time limit;
 - more than seven: publish the highest-ranked seven before length reduction;
 - no rule forces exactly five items.
 
+Days with fewer than three qualifying events have two distinct outcomes:
+
+- `LOW_SIGNAL_DAY`: all required source families are healthy and their expected collection windows are covered, but only one or two events pass confidence and importance thresholds. Publish an intentionally short one- or two-item brief with this status rather than adding weak filler.
+- `DEGRADED_SOURCE_COVERAGE`: one or more required source families lack fresh successful coverage for the daily window because of collector, parser, rate-limit, or upstream failures. Block publication and send the candidate brief to internal review. Missing coverage must never be presented as a quiet news day.
+
+Zero qualifying events with healthy source coverage produces a publishable zero-item `LOW_SIGNAL_DAY` notice only in the internal model; the public Today response shows a clear “no material changes met the bar” state rather than an empty Brief Item list presented as a normal brief.
+
 Reading time is a publication gate, not decorative metadata. It is calculated from rendered Korean/Latin word and character counts using a versioned algorithm. The target is three to five minutes, and the hard limit is 300 seconds. Synthesis first applies bounded field-level shortening; if the brief still exceeds 300 seconds, the lowest-ranked item is removed while at least three remain. A brief still over the limit, or reduced below three items, is rejected for review rather than published.
 
-Other publication failures include missing sources, invalid or missing dates, unsupported factual claims, unresolved ambiguous clusters, duplicate events in the same brief, invalid source URLs, and stale window boundaries.
+Other publication failures include invalid or missing dates, unsupported factual claims or missing fact-level provenance, unresolved ambiguous clusters, duplicate events in the same brief, invalid source URLs, and stale window boundaries.
 
 ## 10. Daily Window and Scheduling
 
 All stored timestamps remain timezone-aware UTC. Brief date and delivery schedule use `Asia/Seoul`. The default brief window is the previous 24 hours at window close.
+
+`RawItem.published_at` is the source's asserted publication time; `EventCluster.first_seen_at` is when SoloPilot first observed any member of that event. They are not interchangeable. Window eligibility starts from `published_at`, while operational freshness and late-arrival handling use `first_seen_at` and collection timestamps.
+
+Late-arrival rules are deterministic:
+
+1. an item published inside the current window and collected before the synthesis cutoff is eligible for that brief;
+2. an item published inside the just-closed window but collected after publication attaches to the existing event as new evidence and does not silently rewrite a published brief; a corrected brief requires a new explicit version;
+3. a late item that matches an event already briefed is deduplicated into that event and is not ranked as a new event in the next window;
+4. a follow-up with a distinct release, decision, security impact, pricing change, or other material action becomes a new event even when it shares the same entity;
+5. an old item first discovered late cannot enter a new brief merely because `first_seen_at` is recent; it may enter only through explicit backfill/review policy;
+6. all decisions record window, clustering, and rule versions so replay produces the same outcome.
 
 Proposed configurable schedule:
 
@@ -243,7 +265,7 @@ The user-facing routes become:
 
 - `/today`: default route and the first-slice value surface;
 - `/radar`: preserved shell/placeholder backed only by existing observed activity, with no new inference;
-- `/saved`: existing capability retained;
+- `/saved`: existing Trend-card capability retained; saving the new BriefItem model is explicitly deferred to Slice 2;
 - `/settings`: existing capability retained and later extended with source, language, timezone, and notification time.
 
 Today presents date, “오늘의 IT 5분,” one-line summary, ranked Brief Items, and actual analysis statistics. It has no infinite scroll. Items have unequal visual emphasis by rank, show Fact/Interpretation/Watch distinctly, and provide accessible source links. Existing internal routes remain available under `/internal` for source health, ambiguous clusters, rejected candidates, brief preview, and publication state.
@@ -264,7 +286,7 @@ Today presents date, “오늘의 IT 5분,” one-line summary, ranked Brief Ite
 TDD is mandatory for implementation. The first slice includes:
 
 - source adapter contract tests for GeekNews, HN, GitHub Releases, and both official feeds;
-- policy tests that prevent disallowed full-content persistence/display;
+- policy tests that keep SourceDefinition/SourcePolicy immutable during runtime health updates and prevent disallowed full-content persistence/display, including GeekNews summary/snippet redistribution;
 - raw-fetch/RawItem separation and parser-version replay tests;
 - URL normalization and duplicate tests;
 - conservative clustering tests, including explicit non-merge cases;
@@ -273,12 +295,14 @@ TDD is mandatory for implementation. The first slice includes:
 - entity and evidence classification tests;
 - independent evidence-confidence and importance tests;
 - ranking and deterministic tie-break tests;
-- unsupported-claim, date, source, ambiguity, duplicate-event, item-count, and reading-time publication-gate tests;
+- claim-to-evidence provenance tests for every publishable FACT;
+- unsupported-claim, date, source coverage, ambiguity, duplicate-event, normal item-count, low-signal-day, degraded-coverage, and reading-time publication-gate tests;
+- published-at/first-seen window and late-arrival deduplication tests;
 - brief versioning and scheduler idempotency tests;
 - API and Today UI tests, including source-link preservation and accessibility;
 - existing backend and frontend regression suites.
 
-The Golden Dataset begins with at least 50 versioned RawItems covering expected duplicates, non-duplicates, clusters, entities, confidence, importance, and brief inclusion. Quality reporting records:
+The Golden Dataset begins with at least 50 versioned RawItems covering expected duplicates, non-duplicates, clusters, entities, confidence, importance, and brief inclusion. It must include explicit Hard Negative groups that are expected to remain separate: the same entity involved in different events, different releases on the same day, a follow-up versus a genuinely new event, similar launch language for different products, and the same vulnerability family affecting distinct versions or projects. Positive fixtures include multi-source representations of one known event, including the four-source fixture. Quality reporting records:
 
 - Incorrect Merge Rate as the primary clustering safety metric;
 - Duplicate Escape Rate;
@@ -304,10 +328,10 @@ The slice is complete only when:
 2. normalized RawItems retain links to immutable raw fetch provenance;
 3. deduplication and conservative clustering pass the Golden Dataset with zero known incorrect merges;
 4. the four-source same-event fixture produces exactly one EventCluster without using source count as a rule;
-5. entities and evidence are linked to each event;
+5. entities and evidence are linked to each event, and every published FACT is traceable to its exact EventEvidence rows;
 6. evidence confidence and importance are computed and stored separately;
 7. ranking selects only confidence-qualified events;
-8. publication emits three to seven distinct events and rejects output over five minutes;
+8. normal publication emits three to seven distinct events, healthy low-signal days may publish one or two, degraded source coverage blocks publication, and every published result stays within five minutes;
 9. every published item contains Fact, Interpretation, Watch, and source links;
 10. `/today` renders the latest published brief and real analysis statistics;
 11. collection-to-Today succeeds on a real-data run;
