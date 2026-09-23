@@ -1,6 +1,6 @@
 # SoloPilot First Vertical Slice Implementation Progress
 
-Canonical base: `a229c14`  
+Canonical base: `a229c14`
 Branch: `codex/solopilot-it-intelligence-v0`
 
 ## Completed increments

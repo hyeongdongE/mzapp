@@ -1,8 +1,8 @@
 # SoloPilot IT Intelligence V0 First Vertical Slice Design
 
-**Status:** Approved design captured for implementation planning  
-**Date:** 2026-09-23  
-**Canonical base:** Trend Radar User MVP commit `a229c14`  
+**Status:** Approved design captured for implementation planning
+**Date:** 2026-09-23
+**Canonical base:** Trend Radar User MVP commit `a229c14`
 **Implementation branch:** `codex/solopilot-it-intelligence-v0`
 
 ## 1. Purpose
