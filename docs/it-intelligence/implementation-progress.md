@@ -40,6 +40,26 @@ Google Trends and Wikimedia remain in the source registry but are disabled for t
 
 The First Vertical Slice is complete. Subsequent work is gated to Daily Brief Quality Validation; source expansion and follow-on product features remain blocked until that validation produces reviewed results.
 
+## Daily Brief Quality Validation
+
+Branch: `codex/daily-brief-quality-validation`
+
+- Tooling Ready for Field Use: **PENDING FINAL REGRESSION**
+- 5-day Quality Validation Complete: **IN_PROGRESS**
+- Eligible real Brief dates: **0 recorded in this implementation cycle**
+- Validation report: **not yet eligible for `VALIDATION_SAMPLE_COMPLETE`**
+
+Implementation artifacts:
+
+- Design: `docs/superpowers/specs/2026-09-23-daily-brief-quality-validation-design.md`
+- Plan: `docs/superpowers/plans/2026-09-23-daily-brief-quality-validation.md`
+- Migration: `alembic/versions/0012_daily_brief_quality_review.py`
+- Internal workflow: `/internal/brief-quality`
+- Report command: `scripts/evaluate_brief_quality.py`
+- Operations: `docs/it-intelligence/daily-brief-quality-validation.md`
+
+The reviewer must use `/today` first and the internal surface second. `active_review_seconds` measures internal review effort only. Review data remains analytical and has no automatic path into ranking, clustering, prompts, source policy, personalization, or ML.
+
 ## Explicitly out of scope
 
 Long-term trend inference, personalization, X, arXiv, Hugging Face, Ask SoloPilot, Brief Item saving, and a large internal package/repository rename remain unstarted.
