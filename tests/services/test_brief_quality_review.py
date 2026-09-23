@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, date, datetime
 
 import pytest
@@ -17,21 +18,28 @@ from app.models.enums import (
     FactCorrectness,
     IncorrectMergeVerdict,
     InterpretationQuality,
+    MissingEventDiscoverySource,
+    Source,
     VerbosityVerdict,
     WatchUsefulness,
 )
 from app.models.tables import (
     BriefItem,
+    BriefItemReviewMergeMembership,
     BriefReviewActivityPulse,
     BriefReviewReopen,
     DailyBrief,
     EventCluster,
+    EventClusterItem,
+    MissingEventReview,
 )
 from app.services.brief_quality_review import (
     BriefQualityReviewService,
     ItemReviewInput,
+    MissingEventInput,
     ReviewConflict,
 )
+from tests.intelligence.helpers import EvidenceSpec, seed_event
 
 NOW = datetime(2026, 9, 23, 12, tzinfo=UTC)
 
@@ -158,3 +166,125 @@ def test_completion_rejects_incomplete_review(db_session: Session) -> None:
     review = service.start_session(brief.id, "owner", now=NOW)
     with pytest.raises(ReviewConflict, match="item review"):
         service.complete_session(review.id, now=NOW)
+
+
+def test_structured_merge_and_duplicate_targets_enforce_cluster_ownership(
+    db_session: Session,
+) -> None:
+    cluster = seed_event(
+        db_session,
+        [
+            EvidenceSpec(Source.GEEKNEWS, "One"),
+            EvidenceSpec(Source.HACKER_NEWS, "Two"),
+        ],
+        suffix="quality-merge",
+    )
+    other = seed_event(
+        db_session,
+        [EvidenceSpec(Source.GITHUB_RELEASES, "Other")],
+        suffix="quality-other",
+    )
+    brief = DailyBrief(
+        brief_date=date(2026, 9, 24),
+        version=1,
+        status=BriefStatus.PUBLISHED,
+        window_start=NOW,
+        window_end=NOW,
+        generated_at=NOW,
+        published_at=NOW,
+        selected_count=1,
+        generation_version="brief-v1",
+        pipeline_version="intelligence-pipeline-v1",
+    )
+    db_session.add(brief)
+    db_session.flush()
+    item = BriefItem(
+        brief_id=brief.id,
+        event_cluster_id=cluster.id,
+        position=1,
+        headline="Merged event",
+        category="AI_TECH",
+        what_happened="What",
+        why_it_matters="Why",
+        fact_text="Fact",
+        interpretation_text="Interpretation",
+        watch_text="Watch",
+        source_links=[],
+        importance=80,
+    )
+    db_session.add(item)
+    db_session.flush()
+    memberships = list(
+        db_session.scalars(
+            select(EventClusterItem).where(EventClusterItem.event_cluster_id == cluster.id)
+        )
+    )
+    wrong_membership = db_session.scalar(
+        select(EventClusterItem).where(EventClusterItem.event_cluster_id == other.id)
+    )
+    assert wrong_membership is not None
+    service = BriefQualityReviewService(db_session)
+    review = service.start_session(brief.id, "owner", now=NOW)
+
+    saved = service.upsert_item_review(
+        review.id,
+        item.id,
+        replace(
+            valid_item_review(),
+            incorrect_merge_verdict=IncorrectMergeVerdict.INCORRECT_MERGE,
+            incorrect_merge_membership_ids=(memberships[0].id,),
+        ),
+        now=NOW,
+    )
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(BriefItemReviewMergeMembership)
+            .where(BriefItemReviewMergeMembership.brief_item_review_id == saved.id)
+        )
+        == 1
+    )
+    with pytest.raises(ReviewConflict, match="must belong"):
+        service.upsert_item_review(
+            review.id,
+            item.id,
+            replace(
+                valid_item_review(),
+                incorrect_merge_verdict=IncorrectMergeVerdict.INCORRECT_MERGE,
+                incorrect_merge_membership_ids=(wrong_membership.id,),
+            ),
+            now=NOW,
+        )
+    with pytest.raises(ReviewConflict, match="structured target"):
+        service.upsert_item_review(
+            review.id,
+            item.id,
+            replace(
+                valid_item_review(),
+                duplicate_escape_verdict=DuplicateEscapeVerdict.DUPLICATE_ESCAPE,
+            ),
+            now=NOW,
+        )
+
+
+def test_missing_event_uses_independent_source_and_canonical_https_url(
+    db_session: Session,
+) -> None:
+    brief = seed_brief(db_session)
+    service = BriefQualityReviewService(db_session)
+    review = service.start_session(brief.id, "owner", now=NOW)
+
+    missing = service.add_missing_event(
+        review.id,
+        MissingEventInput(
+            canonical_title="Uncovered launch",
+            canonical_url="https://EXAMPLE.com/launch#discussion",
+            discovered_from=MissingEventDiscoverySource.X,
+            reason="Material release",
+        ),
+        now=NOW,
+    )
+
+    assert missing.canonical_url == "https://example.com/launch"
+    assert missing.discovered_from is MissingEventDiscoverySource.X
+    assert db_session.scalar(select(func.count()).select_from(MissingEventReview)) == 1

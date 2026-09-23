@@ -299,12 +299,13 @@ def missing_event(
     overall_notes: Annotated[str | None, Form()] = None,
 ) -> RedirectResponse:
     service = BriefQualityReviewService(session)
-    values = (canonical_title, canonical_url, discovered_from, reason)
-    if any(value is not None and value != "" for value in values):
-        if not all(values):
-            raise HTTPException(422, "all missing-event fields are required")
-        _call(
-            lambda: service.add_missing_event(
+
+    def persist_missing_assessment() -> BriefReviewSession:
+        values = (canonical_title, canonical_url, discovered_from, reason)
+        if any(value is not None and value != "" for value in values):
+            if not all(values):
+                raise ValueError("all missing-event fields are required")
+            service.add_missing_event(
                 review_id,
                 MissingEventInput(
                     str(canonical_title),
@@ -314,11 +315,14 @@ def missing_event(
                 ),
                 now=datetime.now(UTC),
             )
-        )
-    service.set_missing_events_confirmed(review_id, missing_events_confirmed)
-    service.update_overall_notes(review_id, overall_notes)
-    review = session.get(BriefReviewSession, review_id)
-    assert review is not None
+        service.set_missing_events_confirmed(review_id, missing_events_confirmed)
+        service.update_overall_notes(review_id, overall_notes)
+        review = session.get(BriefReviewSession, review_id)
+        if review is None:
+            raise LookupError("review session not found")
+        return review
+
+    review = _call(persist_missing_assessment)
     return _redirect(review.brief_id)
 
 
