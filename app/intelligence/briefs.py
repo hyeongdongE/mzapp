@@ -17,6 +17,7 @@ CONFIDENCE_RANK = {
 @dataclass(frozen=True)
 class BriefCandidate:
     event_id: int
+    assessment_version: str
     confidence: EvidenceConfidence
     importance: float
     first_seen_at: datetime

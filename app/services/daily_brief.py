@@ -29,6 +29,7 @@ from app.models.tables import (
 
 SEOUL = ZoneInfo("Asia/Seoul")
 MIN_IMPORTANCE = 20.0
+INTELLIGENCE_PIPELINE_VERSION = "intelligence-pipeline-v1"
 
 
 @dataclass(frozen=True)
@@ -130,6 +131,7 @@ class DailyBriefService:
             word_count=self._estimator.count_units(final_text),
             reading_time_seconds=reading_seconds,
             generation_version=version,
+            pipeline_version=INTELLIGENCE_PIPELINE_VERSION,
         )
         self._session.add(brief)
         self._session.flush()
@@ -301,6 +303,7 @@ class DailyBriefService:
             candidates.append(
                 BriefCandidate(
                     event_id=event_id,
+                    assessment_version=assessment.assessment_version,
                     confidence=assessment.confidence,
                     importance=assessment.importance,
                     first_seen_at=_aware_utc(cluster.first_seen_at),
@@ -361,6 +364,7 @@ class DailyBriefService:
         item = BriefItem(
             brief_id=brief_id,
             event_cluster_id=candidate.event_id,
+            assessment_version=candidate.assessment_version,
             position=position,
             headline=draft.headline,
             category="IT",

@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.brief_quality import router as brief_quality_router
 from app.api.dashboard import router as dashboard_router
 from app.api.public import router as public_router
 from app.api.reviews import router as reviews_router
@@ -26,6 +27,7 @@ def create_app(
     static_path = Path(__file__).resolve().parent.parent / "dashboard" / "static"
     created.mount("/static", StaticFiles(directory=static_path), name="static")
     created.include_router(dashboard_router)
+    created.include_router(brief_quality_router)
     created.include_router(reviews_router)
     created.include_router(public_router)
     created.include_router(today_router)

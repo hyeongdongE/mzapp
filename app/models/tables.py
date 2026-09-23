@@ -26,17 +26,26 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.models.enums import (
+    BriefItemUsefulness,
+    BriefReviewSessionStatus,
     BriefStatus,
     CandidateStatus,
     Category,
     CategoryAvailability,
     ClusterStatus,
     DataMode,
+    DuplicateEscapeVerdict,
+    EventSelectionVerdict,
     EvidenceConfidence,
     EvidenceKind,
+    EvidenceSetUsefulness,
     EvidenceStatus,
+    FactCorrectness,
     FeedbackType,
     HumanEvaluationLabel,
+    IncorrectMergeVerdict,
+    InterpretationQuality,
+    MissingEventDiscoverySource,
     NotificationMode,
     ProductEventType,
     ResolutionStatus,
@@ -46,6 +55,8 @@ from app.models.enums import (
     RunStatus,
     Source,
     TrendLifecycle,
+    VerbosityVerdict,
+    WatchUsefulness,
 )
 
 
@@ -803,6 +814,7 @@ class DailyBrief(Base):
     word_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     reading_time_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     generation_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    pipeline_version: Mapped[str] = mapped_column(String(80), nullable=False)
 
 
 class BriefItem(Base):
@@ -817,6 +829,7 @@ class BriefItem(Base):
     event_cluster_id: Mapped[int] = mapped_column(
         ForeignKey("event_clusters.id"), nullable=False
     )
+    assessment_version: Mapped[str] = mapped_column(String(80), nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     headline: Mapped[str] = mapped_column(String(500), nullable=False)
     category: Mapped[str] = mapped_column(String(40), nullable=False)
@@ -847,3 +860,174 @@ class BriefItemFact(Base):
         ForeignKey("event_evidence.id"), nullable=False
     )
     fact_text_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class BriefReviewSession(Base):
+    __tablename__ = "brief_review_sessions"
+    __table_args__ = (
+        UniqueConstraint(
+            "brief_id", "reviewer", name="uq_brief_review_session_brief_reviewer"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    brief_id: Mapped[int] = mapped_column(
+        ForeignKey("daily_briefs.id", ondelete="RESTRICT"), nullable=False
+    )
+    reviewer: Mapped[str] = mapped_column(String(160), nullable=False)
+    status: Mapped[BriefReviewSessionStatus] = mapped_column(
+        enum_column(BriefReviewSessionStatus), nullable=False
+    )
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completion_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    missing_events_confirmed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    overall_notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class BriefReviewReopen(Base):
+    __tablename__ = "brief_review_reopens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("brief_review_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    actor: Mapped[str] = mapped_column(String(160), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    reopened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    previous_completed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    previous_completion_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class BriefReviewActivityPulse(Base):
+    __tablename__ = "brief_review_activity_pulses"
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id", "client_event_id", name="uq_brief_review_activity_event"
+        ),
+        CheckConstraint(
+            "active_seconds >= 1 AND active_seconds <= 30",
+            name="ck_brief_review_activity_seconds",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("brief_review_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    client_event_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    active_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class BriefItemReview(Base):
+    __tablename__ = "brief_item_reviews"
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id", "brief_item_id", name="uq_brief_item_review_session_item"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("brief_review_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    brief_item_id: Mapped[int] = mapped_column(
+        ForeignKey("brief_items.id", ondelete="RESTRICT"), nullable=False
+    )
+    usefulness: Mapped[BriefItemUsefulness] = mapped_column(
+        enum_column(BriefItemUsefulness), nullable=False
+    )
+    event_selection: Mapped[EventSelectionVerdict] = mapped_column(
+        enum_column(EventSelectionVerdict), nullable=False
+    )
+    fact_correctness: Mapped[FactCorrectness] = mapped_column(
+        enum_column(FactCorrectness), nullable=False
+    )
+    interpretation_quality: Mapped[InterpretationQuality] = mapped_column(
+        enum_column(InterpretationQuality), nullable=False
+    )
+    watch_usefulness: Mapped[WatchUsefulness] = mapped_column(
+        enum_column(WatchUsefulness), nullable=False
+    )
+    verbosity: Mapped[VerbosityVerdict] = mapped_column(
+        enum_column(VerbosityVerdict), nullable=False
+    )
+    evidence_set_usefulness: Mapped[EvidenceSetUsefulness] = mapped_column(
+        enum_column(EvidenceSetUsefulness), nullable=False
+    )
+    incorrect_merge_verdict: Mapped[IncorrectMergeVerdict] = mapped_column(
+        enum_column(IncorrectMergeVerdict), nullable=False
+    )
+    duplicate_escape_verdict: Mapped[DuplicateEscapeVerdict] = mapped_column(
+        enum_column(DuplicateEscapeVerdict), nullable=False
+    )
+    duplicate_of_brief_item_id: Mapped[int | None] = mapped_column(
+        ForeignKey("brief_items.id", ondelete="RESTRICT")
+    )
+    duplicate_of_event_cluster_id: Mapped[int | None] = mapped_column(
+        ForeignKey("event_clusters.id", ondelete="RESTRICT")
+    )
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class BriefItemReviewMergeMembership(Base):
+    __tablename__ = "brief_item_review_merge_memberships"
+    __table_args__ = (
+        UniqueConstraint(
+            "brief_item_review_id",
+            "event_cluster_item_id",
+            name="uq_brief_item_review_merge_membership",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    brief_item_review_id: Mapped[int] = mapped_column(
+        ForeignKey("brief_item_reviews.id", ondelete="CASCADE"), nullable=False
+    )
+    event_cluster_item_id: Mapped[int] = mapped_column(
+        ForeignKey("event_cluster_items.id", ondelete="RESTRICT"), nullable=False
+    )
+    reason: Mapped[str | None] = mapped_column(Text)
+
+
+class MissingEventReview(Base):
+    __tablename__ = "missing_event_reviews"
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id", "canonical_url", name="uq_missing_event_review_session_url"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("brief_review_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    canonical_title: Mapped[str] = mapped_column(String(500), nullable=False)
+    canonical_url: Mapped[str] = mapped_column(Text, nullable=False)
+    discovered_from: Mapped[MissingEventDiscoverySource] = mapped_column(
+        enum_column(MissingEventDiscoverySource), nullable=False
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )

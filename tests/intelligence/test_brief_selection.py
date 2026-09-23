@@ -18,6 +18,7 @@ def candidate(
 ) -> BriefCandidate:
     return BriefCandidate(
         event_id=event_id,
+        assessment_version="assessment-v1",
         confidence=confidence,
         importance=importance,
         first_seen_at=NOW + timedelta(minutes=event_id),
