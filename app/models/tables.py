@@ -814,9 +814,7 @@ class DailyBrief(Base):
     word_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     reading_time_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     generation_version: Mapped[str] = mapped_column(String(80), nullable=False)
-    pipeline_version: Mapped[str] = mapped_column(
-        String(80), nullable=False, default="intelligence-pipeline-v1"
-    )
+    pipeline_version: Mapped[str] = mapped_column(String(80), nullable=False)
 
 
 class BriefItem(Base):
@@ -831,6 +829,7 @@ class BriefItem(Base):
     event_cluster_id: Mapped[int] = mapped_column(
         ForeignKey("event_clusters.id"), nullable=False
     )
+    assessment_version: Mapped[str] = mapped_column(String(80), nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     headline: Mapped[str] = mapped_column(String(500), nullable=False)
     category: Mapped[str] = mapped_column(String(40), nullable=False)

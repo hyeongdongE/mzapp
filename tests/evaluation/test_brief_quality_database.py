@@ -111,3 +111,34 @@ def test_loader_includes_only_complete_versioned_review(db_session: Session) -> 
     assert included.clustering_versions == ("cluster-v1",)
     assert included.assessment_versions == ("assessment-v1",)
     assert included.active_review_seconds == 12
+
+
+def test_loader_uses_published_item_assessment_snapshot_not_later_assessment(
+    db_session: Session,
+) -> None:
+    brief = seed_brief(db_session)
+    add_assessment(db_session, brief.id)
+    item = db_session.scalar(select(BriefItem).where(BriefItem.brief_id == brief.id))
+    assert item is not None
+    item.assessment_version = "assessment-v1"
+    db_session.add(
+        EventAssessment(
+            event_cluster_id=item.event_cluster_id,
+            confidence=EvidenceConfidence.STRONG,
+            confidence_breakdown={},
+            importance=90,
+            importance_breakdown={},
+            assessment_version="assessment-v2",
+            assessed_at=NOW.replace(hour=13),
+        )
+    )
+    complete_review(db_session, brief.id)
+
+    facts = load_brief_quality_facts(
+        db_session,
+        reviewer="owner",
+        start_date=date(2026, 9, 23),
+        end_date=date(2026, 9, 23),
+    )
+
+    assert facts.included_dates[0].assessment_versions == ("assessment-v1",)

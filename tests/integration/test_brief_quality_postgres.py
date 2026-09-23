@@ -47,6 +47,29 @@ def _seed_open_review(engine) -> tuple[int, int]:
         return review.id, item.id
 
 
+def test_simultaneous_session_start_is_idempotent(reset_postgres_schema) -> None:
+    engine = reset_postgres_schema
+    with Session(engine) as session:
+        brief_id = seed_brief(session).id
+        session.commit()
+
+    def start() -> int:
+        with Session(engine) as session:
+            review = BriefQualityReviewService(session).start_session(
+                brief_id, "owner", now=NOW
+            )
+            session.commit()
+            return review.id
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(start) for _ in range(2)]
+        review_ids = [future.result(timeout=10) for future in futures]
+
+    assert len(set(review_ids)) == 1
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(BriefReviewSession)) == 1
+
+
 def test_simultaneous_pulse_replay_is_idempotent(reset_postgres_schema) -> None:
     engine = reset_postgres_schema
     review_id, _ = _seed_open_review(engine)

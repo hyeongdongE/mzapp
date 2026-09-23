@@ -28,6 +28,39 @@ def upgrade() -> None:
         ),
     )
     op.alter_column("daily_briefs", "pipeline_version", server_default=None)
+    op.add_column(
+        "brief_items",
+        sa.Column("assessment_version", sa.String(length=80), nullable=True),
+    )
+    op.execute(
+        sa.text(
+            """
+            UPDATE brief_items AS item
+            SET assessment_version = (
+                SELECT assessment.assessment_version
+                FROM event_assessments AS assessment
+                JOIN daily_briefs AS brief ON brief.id = item.brief_id
+                WHERE assessment.event_cluster_id = item.event_cluster_id
+                  AND assessment.assessed_at <= brief.generated_at
+                ORDER BY assessment.assessed_at DESC, assessment.id DESC
+                LIMIT 1
+            )
+            """
+        )
+    )
+    missing_snapshot_count = op.get_bind().execute(
+        sa.text("SELECT count(*) FROM brief_items WHERE assessment_version IS NULL")
+    ).scalar_one()
+    if missing_snapshot_count:
+        raise RuntimeError(
+            "cannot migrate brief_items without an assessment at or before brief generation"
+        )
+    op.alter_column(
+        "brief_items",
+        "assessment_version",
+        existing_type=sa.String(length=80),
+        nullable=False,
+    )
     op.create_table(
         "brief_review_sessions",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -186,4 +219,5 @@ def downgrade() -> None:
     op.drop_table("brief_review_activity_pulses")
     op.drop_table("brief_review_reopens")
     op.drop_table("brief_review_sessions")
+    op.drop_column("brief_items", "assessment_version")
     op.drop_column("daily_briefs", "pipeline_version")

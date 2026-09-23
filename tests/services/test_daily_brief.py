@@ -115,6 +115,9 @@ def test_normal_brief_snapshots_exact_fact_and_evidence_pairs(db_session) -> Non
     assert db_session.scalar(select(func.count()).select_from(BriefItemFact)) > 0
     snapshots = db_session.scalars(select(BriefItemFact)).all()
     assert all(snapshot.event_fact_id and snapshot.event_evidence_id for snapshot in snapshots)
+    items = db_session.scalars(select(BriefItem)).all()
+    assert items
+    assert {item.assessment_version for item in items} == {"assessment-v1"}
 
 
 def test_repeat_generation_does_not_mutate_published_version(db_session) -> None:

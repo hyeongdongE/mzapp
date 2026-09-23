@@ -88,6 +88,7 @@ def seed_brief(session: Session, *, status: BriefStatus = BriefStatus.PUBLISHED)
         BriefItem(
             brief_id=brief.id,
             event_cluster_id=cluster.id,
+            assessment_version="assessment-v1",
             position=1,
             headline="Headline",
             category="AI_TECH",
@@ -201,6 +202,7 @@ def test_structured_merge_and_duplicate_targets_enforce_cluster_ownership(
     item = BriefItem(
         brief_id=brief.id,
         event_cluster_id=cluster.id,
+        assessment_version="assessment-v1",
         position=1,
         headline="Merged event",
         category="AI_TECH",

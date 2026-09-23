@@ -40,6 +40,21 @@ def test_non_published_brief_cannot_start_review(client: TestClient, api_session
     assert response.status_code == 409
 
 
+def test_cross_origin_review_mutation_is_rejected(
+    client: TestClient, api_session: Session
+) -> None:
+    brief = seed_brief(api_session)
+
+    response = client.post(
+        f"/internal/briefs/{brief.id}/quality-review/start",
+        headers={"Origin": "https://attacker.example"},
+        data={"reviewer": "owner"},
+    )
+
+    assert response.status_code == 403
+    assert api_session.scalar(select(BriefReviewSession)) is None
+
+
 def test_categorical_item_review_form_round_trips_all_dimensions(
     client: TestClient, api_session: Session
 ) -> None:

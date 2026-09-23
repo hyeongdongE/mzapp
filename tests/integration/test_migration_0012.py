@@ -26,7 +26,34 @@ def test_0012_upgrade_backfills_brief_and_round_trips() -> None:
     engine = create_engine(TEST_DATABASE_URL)
     with engine.begin() as connection:
         connection.execute(text("DELETE FROM daily_briefs"))
+        cluster_id = connection.execute(
+            text(
+                """
+                INSERT INTO event_clusters (
+                    public_id, canonical_title, first_seen_at, last_seen_at,
+                    status, clustering_version
+                ) VALUES (
+                    'quality-migration-cluster', 'Migration event', NOW(), NOW(),
+                    'ACTIVE', 'cluster-v1'
+                ) RETURNING id
+                """
+            )
+        ).scalar_one()
         connection.execute(
+            text(
+                """
+                INSERT INTO event_assessments (
+                    event_cluster_id, confidence, confidence_breakdown, importance,
+                    importance_breakdown, assessment_version, assessed_at
+                ) VALUES (
+                    :cluster_id, 'STRONG', '{}'::json, 90,
+                    '{}'::json, 'assessment-migration-v1', TIMESTAMPTZ '2026-09-23 11:00:00+00'
+                )
+                """
+            ),
+            {"cluster_id": cluster_id},
+        )
+        brief_id = connection.execute(
             text(
                 """
                 INSERT INTO daily_briefs (
@@ -34,11 +61,27 @@ def test_0012_upgrade_backfills_brief_and_round_trips() -> None:
                     raw_item_count, event_cluster_count, candidate_count, selected_count,
                     word_count, reading_time_seconds, generation_version
                 ) VALUES (
-                    DATE '2026-09-23', 1, 'PUBLISHED', NOW(), NOW(), NOW(),
+                    DATE '2026-09-23', 1, 'PUBLISHED', NOW(), NOW(),
+                    TIMESTAMPTZ '2026-09-23 12:00:00+00',
                     0, 0, 0, 0, 0, 0, 'brief-v1'
-                )
+                ) RETURNING id
                 """
             )
+        ).scalar_one()
+        connection.execute(
+            text(
+                """
+                INSERT INTO brief_items (
+                    brief_id, event_cluster_id, position, headline, category,
+                    what_happened, why_it_matters, fact_text, interpretation_text,
+                    watch_text, source_links, importance
+                ) VALUES (
+                    :brief_id, :cluster_id, 1, 'Headline', 'IT', 'What', 'Why',
+                    'Fact', 'Interpretation', 'Watch', '[]'::json, 90
+                )
+                """
+            ),
+            {"brief_id": brief_id, "cluster_id": cluster_id},
         )
     engine.dispose()
 
@@ -49,6 +92,16 @@ def test_0012_upgrade_backfills_brief_and_round_trips() -> None:
             connection.execute(text("SELECT pipeline_version FROM daily_briefs")).scalar_one()
             == "intelligence-pipeline-v1"
         )
+        assert (
+            connection.execute(text("SELECT assessment_version FROM brief_items")).scalar_one()
+            == "assessment-migration-v1"
+        )
+        assessment_column = next(
+            column
+            for column in inspect(connection).get_columns("brief_items")
+            if column["name"] == "assessment_version"
+        )
+        assert assessment_column["nullable"] is False
         assert {
             "brief_review_sessions",
             "brief_review_reopens",
@@ -82,6 +135,9 @@ def test_0012_upgrade_backfills_brief_and_round_trips() -> None:
     with downgraded.connect() as connection:
         assert "pipeline_version" not in {
             column["name"] for column in inspect(connection).get_columns("daily_briefs")
+        }
+        assert "assessment_version" not in {
+            column["name"] for column in inspect(connection).get_columns("brief_items")
         }
         assert connection.execute(text("SELECT count(*) FROM daily_briefs")).scalar_one() == 1
     downgraded.dispose()

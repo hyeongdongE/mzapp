@@ -44,10 +44,16 @@ The First Vertical Slice is complete. Subsequent work is gated to Daily Brief Qu
 
 Branch: `codex/daily-brief-quality-validation`
 
-- Tooling Ready for Field Use: **PENDING FINAL REGRESSION**
+- Tooling Ready for Field Use: **READY**
 - 5-day Quality Validation Complete: **IN_PROGRESS**
 - Eligible real Brief dates: **0 recorded in this implementation cycle**
 - Validation report: **not yet eligible for `VALIDATION_SAMPLE_COMPLETE`**
+
+Field-use readiness evidence on 2026-09-24: 398 backend tests passed against the
+configured PostgreSQL integration and migration databases; the focused quality
+suite passed 70 tests; PostgreSQL `0011 → 0012 → 0011 → head` migration/backfill
+and concurrent review-session/activity behavior passed; Ruff, ESLint, TypeScript,
+16 frontend tests, and the production frontend build passed.
 
 Implementation artifacts:
 

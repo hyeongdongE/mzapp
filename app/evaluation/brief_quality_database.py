@@ -22,7 +22,6 @@ from app.models.tables import (
     BriefReviewActivityPulse,
     BriefReviewSession,
     DailyBrief,
-    EventAssessment,
     EventCluster,
     MissingEventReview,
 )
@@ -124,19 +123,15 @@ def _eligible_date(
         return _excluded(brief, "ZERO_ACTIVE_REVIEW_TIME")
     cluster_ids = sorted({item.event_cluster_id for item in items})
     clusters = list(session.scalars(select(EventCluster).where(EventCluster.id.in_(cluster_ids))))
-    assessments = list(
-        session.scalars(
-            select(EventAssessment).where(EventAssessment.event_cluster_id.in_(cluster_ids))
-        )
-    )
     clustering_versions = tuple(sorted({value.clustering_version for value in clusters}))
-    assessment_versions = tuple(sorted({value.assessment_version for value in assessments}))
+    assessment_versions = tuple(sorted({value.assessment_version for value in items}))
     if (
         not brief.pipeline_version
         or not brief.generation_version
         or len(clusters) != len(cluster_ids)
         or not clustering_versions
         or not assessment_versions
+        or any(not item.assessment_version for item in items)
     ):
         return _excluded(brief, "MISSING_VERSION_PROVENANCE")
     membership_ids: dict[int, list[int]] = defaultdict(list)

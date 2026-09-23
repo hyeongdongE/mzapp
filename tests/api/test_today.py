@@ -36,6 +36,7 @@ def seed_brief(api_session, status: BriefStatus = BriefStatus.PUBLISHED) -> Dail
         word_count=120,
         reading_time_seconds=75,
         generation_version=f"api-{status.value}",
+        pipeline_version="intelligence-pipeline-v1",
     )
     api_session.add(brief)
     api_session.flush()
@@ -43,6 +44,7 @@ def seed_brief(api_session, status: BriefStatus = BriefStatus.PUBLISHED) -> Dail
         BriefItem(
             brief_id=brief.id,
             event_cluster_id=event.id,
+            assessment_version="assessment-api-v1",
             position=1,
             headline="Critical security release",
             category="SECURITY",

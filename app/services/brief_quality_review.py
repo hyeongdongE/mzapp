@@ -74,7 +74,11 @@ class BriefQualityReviewService:
         reviewer = reviewer.strip()
         if not reviewer:
             raise ValueError("reviewer is required")
-        brief = self._session.get(DailyBrief, brief_id)
+        # Lock the immutable parent row so concurrent starts for the same brief
+        # serialize before checking the unique (brief_id, reviewer) key.
+        brief = self._session.scalar(
+            select(DailyBrief).where(DailyBrief.id == brief_id).with_for_update()
+        )
         if brief is None:
             raise LookupError("brief not found")
         if brief.status is not BriefStatus.PUBLISHED:

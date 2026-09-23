@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db, require_dashboard_access
+from app.api.public_dependencies import enforce_same_origin
 from app.models.enums import (
     BriefItemUsefulness,
     DuplicateEscapeVerdict,
@@ -40,7 +41,10 @@ from app.services.brief_quality_review import (
 )
 
 templates = Jinja2Templates(directory="dashboard/templates")
-router = APIRouter(prefix="/internal", dependencies=[Depends(require_dashboard_access)])
+router = APIRouter(
+    prefix="/internal",
+    dependencies=[Depends(require_dashboard_access), Depends(enforce_same_origin)],
+)
 SessionDependency = Annotated[Session, Depends(get_db)]
 
 

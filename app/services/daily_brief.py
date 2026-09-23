@@ -303,6 +303,7 @@ class DailyBriefService:
             candidates.append(
                 BriefCandidate(
                     event_id=event_id,
+                    assessment_version=assessment.assessment_version,
                     confidence=assessment.confidence,
                     importance=assessment.importance,
                     first_seen_at=_aware_utc(cluster.first_seen_at),
@@ -363,6 +364,7 @@ class DailyBriefService:
         item = BriefItem(
             brief_id=brief_id,
             event_cluster_id=candidate.event_id,
+            assessment_version=candidate.assessment_version,
             position=position,
             headline=draft.headline,
             category="IT",

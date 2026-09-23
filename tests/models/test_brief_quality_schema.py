@@ -58,6 +58,9 @@ def test_schema_contains_brief_quality_tables_and_constraints() -> None:
     }
     assert expected <= set(Base.metadata.tables)
     assert "pipeline_version" in Base.metadata.tables["daily_briefs"].columns
+    assert Base.metadata.tables["daily_briefs"].c.pipeline_version.default is None
+    assert "assessment_version" in Base.metadata.tables["brief_items"].columns
+    assert Base.metadata.tables["brief_items"].c.assessment_version.nullable is False
 
     names = {
         constraint.name

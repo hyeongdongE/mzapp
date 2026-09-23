@@ -13,4 +13,8 @@ def test_activity_timer_is_foreground_bounded_and_flushes_lifecycle_events() -> 
     assert 'document.addEventListener("visibilitychange"' in source
     assert 'document.addEventListener("submit", flush)' in source
     assert "crypto.randomUUID()" in source
-    assert "activeSeconds += seconds" in source
+    assert "pendingPulse" in source
+    assert "sessionStorage.setItem" in source
+    assert "sessionStorage.removeItem" in source
+    assert "response.ok" in source
+    assert "pendingPulse = null" in source
