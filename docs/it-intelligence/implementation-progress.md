@@ -43,6 +43,10 @@ The First Vertical Slice is complete. Subsequent work is gated to Daily Brief Qu
 ## Daily Brief Quality Validation
 
 Branch: `codex/daily-brief-quality-validation`
+Merged by PR: `#4` into `codex/geeknews-mini-pc-deploy`
+Merge commit: `bb24d3f101c4821f6743b35a7e621d0abf9977da`
+Tooling status: **MERGED / READY FOR FIELD USE**
+Operating mode: **SoloPilot Dogfood Operation**
 
 - Tooling Ready for Field Use: **READY**
 - 5-day Quality Validation Complete: **IN_PROGRESS**
@@ -70,6 +74,13 @@ Implementation artifacts:
 - Operations: `docs/it-intelligence/daily-brief-quality-validation.md`
 
 The reviewer must use `/today` first and the internal surface second. `active_review_seconds` measures internal review effort only. Review data remains analytical and has no automatic path into ranking, clustering, prompts, source policy, personalization, or ML.
+
+From 2026-09-24 until the Quality Validation Report is complete, the source set,
+source policy, clustering logic and threshold, ranking, assessment, synthesis
+prompt, and publication gate are frozen. Only service interruption, data damage,
+provenance loss, scheduler failure, or another explicit operational-integrity
+defect may change the deployed system; every such correction must record its date
+and validation impact.
 
 ## Explicitly out of scope
 
