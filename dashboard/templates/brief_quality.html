@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Brief Quality · SoloPilot{% endblock %}
+{% block content %}
+<h1>Daily Brief Quality Validation</h1>
+<p>먼저 <a href="/today">/today를 실제 제품 화면으로 사용</a>한 뒤 이곳에서 평가하세요.</p>
+<table><thead><tr><th>Date / version</th><th>Status</th><th>Items</th><th>Review</th></tr></thead><tbody>
+{% for row in rows %}<tr>
+  <td><a href="/internal/briefs/{{ row.brief.id }}/quality-review">{{ row.brief.brief_date }} · v{{ row.brief.version }}</a></td>
+  <td>{{ row.brief.status.value }}</td><td>{{ row.item_count }}</td>
+  <td>{{ row.review.status.value if row.review else "UNREVIEWED" }}</td>
+</tr>{% endfor %}
+</tbody></table>
+{% endblock %}

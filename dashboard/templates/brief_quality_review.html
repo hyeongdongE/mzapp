@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Quality Review · SoloPilot{% endblock %}
+{% block content %}
+<p><a href="/today">먼저 /today에서 Brief 읽기</a> · <a href="/internal/brief-quality">목록</a></p>
+<h1>{{ brief.brief_date }} · v{{ brief.version }}</h1>
+<p>이 화면의 시간은 제품 읽기 시간이 아닌 <strong>active review effort</strong>입니다.</p>
+{% if not review %}
+<form method="post" action="/internal/briefs/{{ brief.id }}/quality-review/start">
+  <label>Reviewer <input name="reviewer" required></label><button>리뷰 시작</button>
+</form>
+{% else %}
+<p id="active-review-seconds">Active review seconds: {{ active_review_seconds }}</p>
+<div data-review-session="{{ review.id }}" data-review-open="{{ review.status.value == 'OPEN' }}"></div>
+{% for item in items %}<article><h2>{{ item.position }}. {{ item.headline }}</h2>
+  <p><strong>FACT</strong> {{ item.fact_text }}</p><p><strong>INTERPRETATION</strong> {{ item.interpretation_text }}</p>
+  <p><strong>WATCH</strong> {{ item.watch_text }}</p>
+  {% for source in item.source_links %}<a href="{{ source.url }}" rel="noopener noreferrer">{{ source.title or source.url }}</a>{% endfor %}
+</article>{% endfor %}
+{% if review.status.value == 'OPEN' %}
+<form method="post" action="/internal/brief-review-sessions/{{ review.id }}/complete"><button>Complete review</button></form>
+{% else %}
+<form method="post" action="/internal/brief-review-sessions/{{ review.id }}/reopen">
+  <input name="actor" required placeholder="Actor"><input name="reason" required placeholder="Reason"><button>Reopen</button>
+</form>
+{% endif %}
+{% for audit in reopens %}<p>Reopened: {{ audit.actor }} — {{ audit.reason }}</p>{% endfor %}
+<script src="{{ url_for('static', path='/brief_quality.js') }}" defer></script>
+{% endif %}
+{% endblock %}
