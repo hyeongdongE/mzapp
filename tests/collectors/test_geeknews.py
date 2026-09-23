@@ -50,6 +50,10 @@ async def test_geeknews_maps_only_atom_identity_title_link_and_timestamp() -> No
         2026, 9, 21, 0, 55, 1, tzinfo=UTC
     )
     assert batch.items[0].source_url == "https://news.hada.io/topic?id=34041"
+    assert batch.items[0].title == "LangChain은 유료 광고 운영 에이전트를 어떻게 만들었나"
+    assert batch.items[0].original_url == "https://news.hada.io/topic?id=34041"
+    assert batch.items[0].snippet is None
+    assert batch.items[0].metadata == {"attribution": "GeekNews"}
     assert batch.items[0].metrics == {
         "entry_id": "https://news.hada.io/topic?id=34041",
         "link": "https://news.hada.io/topic?id=34041",

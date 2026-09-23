@@ -1,0 +1,21 @@
+[
+  {
+    "by": "alice",
+    "descendants": 183,
+    "id": 44001,
+    "score": 412,
+    "time": 1790121600,
+    "title": "Acme releases Agent SDK 1.0",
+    "type": "story",
+    "url": "https://acme.example/blog/agent-sdk-1"
+  },
+  {
+    "by": "bob",
+    "descendants": 21,
+    "id": 44002,
+    "score": 87,
+    "time": 1790121660,
+    "title": "Show HN: Local database profiler",
+    "type": "story"
+  }
+]

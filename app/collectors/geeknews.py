@@ -99,6 +99,10 @@ def parse_geeknews_atom(
                 canonical_text=title,
                 source_url=source_url,
                 metrics={"entry_id": entry_id, "link": source_url},
+                title=title,
+                original_url=source_url,
+                snippet=None,
+                metadata={"attribution": "GeekNews"},
             )
         )
     return parsed
