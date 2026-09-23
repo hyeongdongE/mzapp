@@ -11,12 +11,41 @@
 {% else %}
 <p id="active-review-seconds">Active review seconds: {{ active_review_seconds }}</p>
 <div data-review-session="{{ review.id }}" data-review-open="{{ review.status.value == 'OPEN' }}"></div>
-{% for item in items %}<article><h2>{{ item.position }}. {{ item.headline }}</h2>
+{% for item in items %}{% set saved = item_reviews.get(item.id) %}<article><h2>{{ item.position }}. {{ item.headline }}</h2>
   <p><strong>FACT</strong> {{ item.fact_text }}</p><p><strong>INTERPRETATION</strong> {{ item.interpretation_text }}</p>
   <p><strong>WATCH</strong> {{ item.watch_text }}</p>
   {% for source in item.source_links %}<a href="{{ source.url }}" rel="noopener noreferrer">{{ source.title or source.url }}</a>{% endfor %}
+  {% if review.status.value == 'OPEN' %}
+  <form method="post" action="/internal/brief-review-sessions/{{ review.id }}/items/{{ item.id }}">
+    {% for field, label in [
+      ('usefulness', 'Useful Brief Item'), ('event_selection', 'Event selection'),
+      ('fact_correctness', 'Fact correctness'), ('interpretation_quality', 'Interpretation quality'),
+      ('watch_usefulness', 'Watch usefulness'), ('verbosity', 'Verbosity'),
+      ('evidence_set_usefulness', 'Evidence-set usefulness'),
+      ('incorrect_merge_verdict', 'Incorrect merge'), ('duplicate_escape_verdict', 'Duplicate escape')
+    ] %}
+    <label>{{ label }}<select name="{{ field }}" required>
+      {% for choice in review_enums[field] %}<option value="{{ choice.value }}"{% if saved and saved[field].value == choice.value %} selected{% endif %}>{{ choice.value }}</option>{% endfor %}
+    </select></label>
+    {% endfor %}
+    <label>Duplicate BriefItem <select name="duplicate_of_brief_item_id"><option value="">None</option>{% for target in items if target.id != item.id %}<option value="{{ target.id }}"{% if saved and saved.duplicate_of_brief_item_id == target.id %} selected{% endif %}>#{{ target.position }} {{ target.headline }}</option>{% endfor %}</select></label>
+    <label>Duplicate EventCluster ID <input type="number" name="duplicate_of_event_cluster_id" value="{{ saved.duplicate_of_event_cluster_id if saved and saved.duplicate_of_event_cluster_id else '' }}"></label>
+    <fieldset><legend>Incorrect-merge memberships</legend>{% for membership in cluster_memberships[item.id] %}<label><input type="checkbox" name="incorrect_merge_membership_ids" value="{{ membership.id }}"{% if membership.id in saved_membership_ids %} checked{% endif %}>Membership #{{ membership.id }} / RawItem #{{ membership.raw_item_id }}</label>{% else %}<span>No persisted memberships</span>{% endfor %}</fieldset>
+    <label>Notes <textarea name="notes">{{ saved.notes if saved and saved.notes else '' }}</textarea></label>
+    <button>Save item review</button>
+  </form>
+  {% else %}<p>Saved assessment: {{ saved.usefulness.value if saved else 'MISSING' }}</p>{% endif %}
 </article>{% endfor %}
 {% if review.status.value == 'OPEN' %}
+<section><h2>Missing important events</h2>
+  {% for missing in missing_events %}<p><a href="{{ missing.canonical_url }}" rel="noopener noreferrer">{{ missing.canonical_title }}</a> · {{ missing.discovered_from.value }}</p>{% endfor %}
+  <form method="post" action="/internal/brief-review-sessions/{{ review.id }}/missing-events">
+    <label><input type="checkbox" name="missing_events_confirmed" value="true"{% if review.missing_events_confirmed %} checked{% endif %}> I explicitly considered missing important events.</label>
+    <label>Title <input name="canonical_title"></label><label>Canonical HTTPS URL <input type="url" name="canonical_url"></label>
+    <label>Discovered from <select name="discovered_from"><option value="">No event to add</option>{% for choice in review_enums.missing_event_discovery_source %}<option value="{{ choice.value }}">{{ choice.value }}</option>{% endfor %}</select></label>
+    <label>Reason <textarea name="reason"></textarea></label><label>Overall notes <textarea name="overall_notes">{{ review.overall_notes or '' }}</textarea></label><button>Save missing-event assessment</button>
+  </form>
+</section>
 <form method="post" action="/internal/brief-review-sessions/{{ review.id }}/complete"><button>Complete review</button></form>
 {% else %}
 <form method="post" action="/internal/brief-review-sessions/{{ review.id }}/reopen">

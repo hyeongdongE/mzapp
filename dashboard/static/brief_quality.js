@@ -2,15 +2,9 @@
   const root = document.querySelector("[data-review-session]");
   if (!root || root.dataset.reviewOpen !== "True") return;
   let activeSeconds = 0;
-  let lastTick = Date.now();
   const isActive = () => document.visibilityState === "visible" && document.hasFocus();
-  const tick = () => {
-    const now = Date.now();
-    if (isActive()) activeSeconds += Math.floor((now - lastTick) / 1000);
-    lastTick = now;
-  };
+  const sample = () => { if (isActive()) activeSeconds += 1; };
   const flush = () => {
-    tick();
     const seconds = Math.min(30, activeSeconds);
     if (seconds < 1) return;
     activeSeconds -= seconds;
@@ -21,6 +15,7 @@
       method: "POST", body, credentials: "same-origin", keepalive: true,
     }).catch(() => { activeSeconds += seconds; });
   };
+  setInterval(sample, 1000);
   setInterval(flush, 15000);
   ["blur", "pagehide"].forEach((name) => addEventListener(name, flush));
   document.addEventListener("visibilitychange", () => { if (document.hidden) flush(); });
