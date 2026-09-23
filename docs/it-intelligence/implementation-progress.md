@@ -2,6 +2,9 @@
 
 Canonical base: `a229c14`
 Branch: `codex/solopilot-it-intelligence-v0`
+Status: **COMPLETE**
+Merged by PR: `#3` into `codex/geeknews-mini-pc-deploy`
+Merge commit: `f523c5c`
 
 ## Completed increments
 
@@ -33,6 +36,9 @@ Google Trends and Wikimedia remain in the source registry but are disabled for t
 - Exact collector replay is idempotent after a live mutable-payload regression was found and fixed with a test-first terminal-success short-circuit.
 - Backend, frontend, typecheck, lint, and build commands are recorded in `quality-evaluation.md` and the task ledger.
 - Fresh `0001 → 0011`, existing Trend Radar `0010 → 0011`, PostgreSQL integration, migration, persistence, restart, replay, and `/today` checks all pass in the isolated validation environment.
+- Post-merge regression on `f523c5c`: backend 344 passed / 15 environment-gated skips, frontend 16 passed, Ruff and ESLint passed, and the TypeScript/Vite production build passed.
+
+The First Vertical Slice is complete. Subsequent work is gated to Daily Brief Quality Validation; source expansion and follow-on product features remain blocked until that validation produces reviewed results.
 
 ## Explicitly out of scope
 
