@@ -7,6 +7,11 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.base import BaseScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from app.services.intelligence_scheduler import (
+    IntelligenceSchedulerActions,
+    configure_intelligence_scheduler,
+)
+
 SEOUL = ZoneInfo("Asia/Seoul")
 
 
@@ -18,6 +23,7 @@ class SchedulerActions:
     pipeline: Callable[[], None]
     daily_evaluation: Callable[[], None]
     weekly_evaluation: Callable[[], None]
+    intelligence: IntelligenceSchedulerActions | None = None
 
 
 def configure_scheduler(
@@ -60,4 +66,6 @@ def configure_scheduler(
         id="evaluate-weekly",
         **common,
     )
+    if actions.intelligence is not None:
+        configure_intelligence_scheduler(scheduler, actions.intelligence)
     return scheduler
