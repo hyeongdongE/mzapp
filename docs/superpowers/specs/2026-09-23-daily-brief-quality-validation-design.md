@@ -16,12 +16,13 @@ The cycle does not add sources or user-facing product features. Review data is s
 The system succeeds when one reviewer can:
 
 1. open each eligible published Daily Brief in the internal dashboard;
-2. accumulate foreground-only active reading time;
-3. review every BriefItem across the required quality dimensions;
-4. record missing important events and structured duplicate/merge defects;
-5. complete and lock the review session;
-6. explicitly reopen a completed session with an actor, reason, and timestamp when correction is necessary; and
-7. generate deterministic Markdown and JSON reports from PostgreSQL after at least five eligible dates are complete.
+2. use `/today` as the real SoloPilot surface before opening the internal review workflow;
+3. accumulate foreground-only active review time on the internal review screen;
+4. review every BriefItem across the required quality dimensions;
+5. record missing important events and structured duplicate/merge defects;
+6. complete and lock the review session;
+7. explicitly reopen a completed session with an actor, reason, and timestamp when correction is necessary; and
+8. generate deterministic Markdown and JSON reports from PostgreSQL after at least five eligible dates are complete.
 
 The validation cycle remains `IN_PROGRESS` until five eligible Brief dates have completed review sessions. Building the review tooling alone does not satisfy the five-day validation gate.
 
@@ -31,7 +32,7 @@ The validation cycle remains `IN_PROGRESS` until five eligible Brief dates have 
 
 - additive PostgreSQL schema and Alembic migration;
 - internal FastAPI/Jinja reviewer workflow;
-- foreground/visible active-reading measurement;
+- foreground/visible active-review measurement;
 - categorical BriefItem evaluation;
 - structured duplicate, incorrect-merge, and missing-event provenance;
 - daily and aggregate derived reports in Markdown and JSON;
@@ -102,12 +103,14 @@ All categorical values are closed enums stored as strings. Reports must preserve
 - `JUST_RIGHT`
 - `TOO_LONG`
 
-### `SourceUsefulness`
+### `EvidenceSetUsefulness`
 
 - `ESSENTIAL`
 - `HELPFUL`
 - `REDUNDANT`
 - `NOT_USEFUL`
+
+This category evaluates whether the BriefItem's complete displayed evidence/link set is useful for checking the item. It does not score individual sources. Per-source usefulness requires a separate future model and is out of scope.
 
 ### `IncorrectMergeVerdict`
 
@@ -157,11 +160,11 @@ Every transition from `COMPLETED` back to `OPEN` appends an audit row:
 - `previous_completed_at`
 - `previous_completion_revision`
 
-Completed sessions reject reading pulses, item edits, missing-event edits, and note edits. Reopening must lock the session row, append the audit record, clear `completed_at`, change status to `OPEN`, and preserve the previous review data for correction. There is no silent mutation path.
+Completed sessions reject activity pulses, item edits, missing-event edits, and note edits. Reopening must lock the session row, append the audit record, clear `completed_at`, change status to `OPEN`, and preserve the previous review data for correction. There is no silent mutation path.
 
-### `brief_review_reading_pulses`
+### `brief_review_activity_pulses`
 
-Active reading time is derived from append-only foreground pulses rather than `completed_at - started_at`.
+Active review time is derived from append-only foreground pulses rather than `completed_at - started_at`.
 
 Fields:
 
@@ -171,13 +174,13 @@ Fields:
 - `active_seconds`, integer from 1 through 30
 - `recorded_at`
 
-The browser records a pulse only while the review page is visible and the window has focus. It flushes the accumulated visible interval on blur, visibility change, form submit, navigation, or every 15 seconds. Replayed `client_event_id` values are idempotent. The core reading metric is:
+The browser records a pulse only while the review page is visible and the window has focus. It flushes the accumulated visible interval on blur, visibility change, form submit, navigation, or every 15 seconds. Replayed `client_event_id` values are idempotent. The core review-effort metric is:
 
 ```text
-active_reading_seconds = SUM(brief_review_reading_pulses.active_seconds)
+active_review_seconds = SUM(brief_review_activity_pulses.active_seconds)
 ```
 
-Wall-clock session duration is diagnostic only and must not be presented as actual reading time.
+This measures time spent actively evaluating the Brief in the internal review dashboard. It is not `/today` reading time and must not be labeled or interpreted as actual product reading time. Wall-clock session duration is diagnostic only. Measuring actual `/today` reading time requires a separate future dogfood telemetry design.
 
 ### `brief_item_reviews`
 
@@ -221,12 +224,26 @@ Fields:
 - `session_id`
 - `canonical_title`
 - `canonical_url`, required HTTPS URL after canonicalization
-- `discovered_from` using existing `SourceType`
+- `discovered_from` using `MissingEventDiscoverySource`
 - `reason`
 - `created_at`
 - `updated_at`
 
 `(session_id, canonical_url)` is unique. Completing a session requires `missing_events_confirmed=true`, even when the missing-event list is empty.
+
+`MissingEventDiscoverySource` is independent of the collector `Source` and `SourceType` enums so unsupported discovery channels can be recorded without enabling a collector. Its categories are:
+
+- `GEEKNEWS`
+- `HACKER_NEWS`
+- `GITHUB`
+- `OFFICIAL_WEB`
+- `X`
+- `ARXIV`
+- `HUGGING_FACE`
+- `REDDIT`
+- `OTHER`
+
+Recording one of these values is observational only. It must not enable, schedule, or implement the corresponding source.
 
 ## 7. Session state and write rules
 
@@ -236,7 +253,7 @@ All writes go through `BriefQualityReviewService` and occur transactionally.
 - Only `PUBLISHED` Briefs are reviewable for the five-day gate.
 - Item and missing-event writes lock and re-read the session.
 - Writes to `COMPLETED` sessions return a conflict and do not mutate data.
-- Completion requires a review for every BriefItem, explicit missing-event confirmation, and at least one active reading pulse.
+- Completion requires a review for every BriefItem, explicit missing-event confirmation, and at least one active review pulse.
 - Completion sets `completed_at`, increments `completion_revision`, and changes status to `COMPLETED` in one transaction.
 - Reopen requires a non-blank reason and actor, appends its audit row, and changes the session back to `OPEN` in one transaction.
 - A reopened session must pass all completion checks again before it can be completed.
@@ -256,17 +273,19 @@ The existing protected FastAPI/Jinja dashboard is extended; no public route is a
 - source-coverage/publication status;
 - reviewer session state;
 - reviewed item count;
-- foreground active reading time;
+- foreground active review time;
 - eligibility and exclusion reason.
 
 ### Review screen
 
-`GET /internal/briefs/{brief_id}/quality-review` shows the immutable Brief snapshot, sources, FACT/INTERPRETATION/WATCH sections, and categorical controls for every BriefItem. It also provides missing-event inputs, active-reading status, and completion controls.
+`GET /internal/briefs/{brief_id}/quality-review` shows the immutable Brief snapshot, sources, FACT/INTERPRETATION/WATCH sections, and categorical controls for every BriefItem. It also provides missing-event inputs, active-review status, and completion controls.
+
+This screen is not the SoloPilot consumption surface. The documented daily workflow requires the reviewer to use `/today` first, then open the internal screen to evaluate what they already consumed. The review screen may link back to `/today`, but it must not present itself as a substitute for the Today experience.
 
 ### Write routes
 
 - `POST /internal/briefs/{brief_id}/quality-review/start`
-- `POST /internal/brief-review-sessions/{session_id}/reading-pulses`
+- `POST /internal/brief-review-sessions/{session_id}/activity-pulses`
 - `POST /internal/brief-review-sessions/{session_id}/items/{brief_item_id}`
 - `POST /internal/brief-review-sessions/{session_id}/missing-events`
 - `POST /internal/brief-review-sessions/{session_id}/complete`
@@ -276,24 +295,28 @@ The existing dashboard access policy, same-origin browser behavior, escaping rul
 
 ## 9. Date eligibility and operating gate
 
+Eligibility is anchored to the latest `PUBLISHED` DailyBrief version for each date, ordered by version. An older reviewed version never substitutes for a newer published version.
+
 An included validation date must satisfy all of the following:
 
-1. the latest reviewed Brief version for the date has status `PUBLISHED`;
+1. the reviewed target is the latest `PUBLISHED` DailyBrief version for the date;
 2. the Brief contains at least one BriefItem;
 3. the source coverage gate passed when the Brief was published;
-4. one selected reviewer session is `COMPLETED`;
+4. the requested reviewer has a `COMPLETED` session for that exact latest published Brief version;
 5. every BriefItem has a complete item review;
 6. missing events were explicitly considered; and
-7. active reading time is greater than zero.
+7. active review time is greater than zero.
 
-`LOW_SIGNAL_DAY`, `DEGRADED_SOURCE_COVERAGE`, `REJECTED`, and `DRAFT` dates do not count toward the five-date minimum. They remain visible in the report's excluded-date section with a reason. A superseded Brief version is excluded in favor of the latest reviewed published version and is identified explicitly.
+If the latest published version is unreviewed, the date is excluded with `LATEST_PUBLISHED_VERSION_UNREVIEWED`; the report must not fall back to an older completed review. Superseded versions are listed as excluded provenance.
 
-The aggregate report status is:
+`LOW_SIGNAL_DAY`, `DEGRADED_SOURCE_COVERAGE`, `REJECTED`, and `DRAFT` dates do not count toward the five-date quality denominator. They remain visible in the report's operational-date and excluded-date sections with a reason. In particular, every `LOW_SIGNAL_DAY` during the dogfood period is included in the operational record even though it cannot satisfy an item-review denominator.
 
-- `READY` when at least five distinct eligible dates are included;
+The aggregate sample status is:
+
+- `VALIDATION_SAMPLE_COMPLETE` when at least five distinct eligible dates are included;
 - `INSUFFICIENT_VALIDATION_DAYS` otherwise.
 
-The report generator may render partial daily diagnostics before five days, but it must not label the validation cycle complete.
+`VALIDATION_SAMPLE_COMPLETE` means only that the minimum evaluation sample exists. It is not a quality pass, launch decision, or ranking approval. The report generator may render partial daily diagnostics before five days, but it must not label the validation cycle or product quality successful.
 
 ## 10. Derived quality report
 
@@ -322,15 +345,15 @@ Required metrics:
 
 - Useful Brief Rate numerator, denominator, and rate;
 - event-selection verdict distribution;
-- missing important events per day and source-type distribution;
+- missing important events per day and `MissingEventDiscoverySource` distribution;
 - incorrect merge count/rate and linked membership IDs;
 - duplicate escape count/rate and linked item/event targets;
 - Fact correctness distribution;
 - Interpretation quality distribution;
 - Watch usefulness distribution;
 - Verbosity distribution;
-- Source usefulness distribution;
-- active reading time per day plus P50/P95;
+- Evidence-set usefulness distribution;
+- active review time per day plus P50/P95, explicitly labeled as review effort rather than product reading time;
 - reviewed Brief/date/item counts.
 
 Rates use completed item reviews as their denominator unless the metric definition states otherwise. Reports display `N/A` for zero denominators.
@@ -355,18 +378,21 @@ The production collector, processing, generation, and publication schedule remai
 
 1. allow the existing scheduler to collect real external data and publish the Daily Brief;
 2. verify source coverage is healthy;
-3. read the Brief through the internal review screen with active reading tracking enabled;
-4. review every BriefItem and record any missing event;
-5. complete the session; and
-6. generate the partial report to see remaining eligible days.
+3. use `/today` as the real product experience before reviewing;
+4. open the internal quality-review screen and accumulate active review time;
+5. review every BriefItem and record any missing event;
+6. complete the session; and
+7. generate the partial report to see remaining eligible days.
 
 No historical fixture, copied Brief, manually altered publication status, or future-clock run counts toward the five actual dates.
+
+All Brief dates encountered during the dogfood period, including `LOW_SIGNAL_DAY`, are retained in the operational record. Only dates satisfying the stricter eligibility contract contribute to the five-date denominator.
 
 ## 13. Error handling and integrity
 
 - Invalid enum values return validation errors and persist nothing.
 - Duplicate targets and incorrect-merge memberships are validated structurally before commit.
-- Reading pulses above 30 seconds, non-positive pulses, or duplicate event IDs are rejected or treated idempotently as specified.
+- Activity pulses above 30 seconds, non-positive pulses, or duplicate event IDs are rejected or treated idempotently as specified.
 - Concurrent completion/reopen/edit attempts use row locking; a stale completed-state write returns conflict.
 - Deleting a Brief with review history is prohibited by foreign keys.
 - Report generation uses a consistent database snapshot so included dates and metrics cannot drift during rendering.
@@ -386,7 +412,7 @@ No historical fixture, copied Brief, manually altered publication status, or fut
 
 - completed sessions reject silent edits;
 - reopen requires and records actor, reason, timestamp, and prior completion;
-- foreground pulse replay is idempotent and active seconds are summed;
+- foreground pulse replay is idempotent and active review seconds are summed;
 - completion rejects missing item reviews, missing omission confirmation, or zero active time;
 - duplicate targets and incorrect-merge memberships enforce cluster ownership;
 - reviewer writes never alter ranking, Brief, cluster, or assessment outputs.
@@ -395,17 +421,17 @@ No historical fixture, copied Brief, manually altered publication status, or fut
 
 - list and review screens render escaped persisted data;
 - categorical forms round-trip;
-- visibility/focus timer sends only bounded active intervals;
+- visibility/focus timer sends only bounded active review intervals;
 - completed sessions expose reopen rather than edit controls;
 - dashboard access/security behavior remains unchanged.
 
 ### Reports
 
 - Useful Brief Rate uses the approved item denominator;
-- all categorical distributions and reading percentiles are deterministic;
+- all categorical distributions and active-review percentiles are deterministic;
 - included/excluded dates and all version fields are emitted in JSON and Markdown;
 - fewer than five eligible dates yields `INSUFFICIENT_VALIDATION_DAYS`;
-- five eligible dates yields `READY`;
+- five eligible dates yields `VALIDATION_SAMPLE_COMPLETE` without implying a quality pass;
 - zero denominators render `N/A` rather than zero;
 - Markdown is a rendering of the JSON report model.
 
@@ -422,8 +448,8 @@ Implementation is ready for field use when schema, dashboard, service, CLI, and 
 
 - at least five eligible real external-data Brief dates;
 - every included BriefItem reviewed by a human;
-- active reading time captured for every included date;
+- active review time captured for every included date and never reported as actual `/today` reading time;
 - missing important events explicitly assessed;
 - PostgreSQL review records retained as source of truth;
-- a `READY` Markdown and JSON report generated with all required metrics and provenance; and
+- a `VALIDATION_SAMPLE_COMPLETE` Markdown and JSON report generated with all required metrics and provenance; and
 - no automatic ranking, personalization, or ML feedback path exists.
