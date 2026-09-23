@@ -814,7 +814,9 @@ class DailyBrief(Base):
     word_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     reading_time_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     generation_version: Mapped[str] = mapped_column(String(80), nullable=False)
-    pipeline_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    pipeline_version: Mapped[str] = mapped_column(
+        String(80), nullable=False, default="intelligence-pipeline-v1"
+    )
 
 
 class BriefItem(Base):
