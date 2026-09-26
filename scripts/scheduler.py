@@ -7,12 +7,14 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
+from apscheduler.schedulers.base import BaseScheduler
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 from app.db import session_scope
 from app.services.intelligence_scheduler import (
     IntelligencePipeline,
     IntelligenceSchedulerActions,
+    configure_intelligence_scheduler,
 )
 from app.services.scheduler import SEOUL, SchedulerActions, configure_scheduler
 from scripts.build_entities import build
@@ -25,6 +27,20 @@ def completed_week_number(poc_start: date, last_complete_day: date) -> int | Non
     if complete_days < 7:
         return None
     return complete_days // 7
+
+
+def configure_scheduler_mode(
+    scheduler: BaseScheduler,
+    actions: SchedulerActions,
+    mode: str,
+) -> BaseScheduler:
+    if mode == "intelligence-only":
+        if actions.intelligence is None:
+            raise ValueError("intelligence-only mode requires intelligence actions")
+        return configure_intelligence_scheduler(scheduler, actions.intelligence)
+    if mode == "combined":
+        return configure_scheduler(scheduler, actions)
+    raise ValueError(f"unsupported scheduler mode: {mode}")
 
 
 def scheduled_actions(
@@ -117,9 +133,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the single-process trend PoC scheduler")
     parser.add_argument("--poc-start", required=True, type=parse_day)
     parser.add_argument("--output-dir", type=Path, default=Path("reports"))
+    parser.add_argument("--mode", choices=("combined", "intelligence-only"), default="combined")
     args = parser.parse_args()
     scheduler = BlockingScheduler(timezone=SEOUL)
-    configure_scheduler(scheduler, scheduled_actions(args.poc_start, args.output_dir))
+    configure_scheduler_mode(
+        scheduler, scheduled_actions(args.poc_start, args.output_dir), args.mode
+    )
 
     def stop_scheduler(_signum: int, _frame: object) -> None:
         raise SystemExit

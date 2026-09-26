@@ -91,7 +91,7 @@ services:
     command:
       - sh
       - -c
-      - exec .venv/bin/python scripts/scheduler.py --poc-start "$${POC_START_DATE}"
+      - exec .venv/bin/python scripts/scheduler.py --mode intelligence-only --poc-start "$${POC_START_DATE}"
     depends_on:
       migrate:
         condition: service_completed_successfully
