@@ -1,5 +1,10 @@
 # Mini PC production deployment
 
+This runbook is for a dedicated public Caddy deployment. **Do not run its Compose start/update
+commands on the AI Company Mini PC for private SoloPilot dogfood**: they start Caddy on 80/443 and
+do not specify the isolated `solopilot` Compose project. The private dogfood procedure must use
+explicit `db`, `migrate`, `api`, then `scheduler` services with Caddy omitted.
+
 This is the production path for a single Linux mini PC. It builds the existing Vite frontend into
 the FastAPI image, exposes only Caddy on ports 80/443, keeps PostgreSQL on the Docker network, and
 binds the internal dashboard directly to host loopback. Caddy obtains and renews the HTTPS
@@ -130,6 +135,18 @@ Copy backups off the mini PC periodically and test restoration on an isolated Co
 
 ## Scheduler
 
+`compose.prod.yaml` explicitly selects `--mode intelligence-only`. It registers only
+`intelligence-collect-15m`, `intelligence-process-15m`, `intelligence-generate-0735`, and
+`intelligence-publish-0800`. The default CLI `combined` mode preserves the existing legacy
+scheduler for operators who intentionally invoke it outside this production Compose service.
+
+For a fresh private dogfood deployment, check `/healthz` (HTTP 200), PostgreSQL migration,
+API health, and the manual real-source pipeline before enabling the scheduler. The SPA page
+`/today` should load, but its HTTP 200 does **not** prove a Brief exists. The data endpoint
+`/api/public/today` may return 404 until a Daily Brief is published; do not use its HTTP 200 as
+a pre-publication gate. After publication, require `/api/public/today` HTTP 200 and a persisted
+published Brief, then verify `/today` presents it.
+
 Enable the scheduler only after manual LIVE collection/pipeline verification succeeds:
 
 ```sh
@@ -138,9 +155,10 @@ docker compose --env-file .env.production -f compose.prod.yaml logs -f --tail=10
 docker compose --env-file .env.production -f compose.prod.yaml stop scheduler
 ```
 
-The current Asia/Seoul schedule is Google hourly at minute 0, GeekNews hourly at minute 5, the
-pipeline hourly at minute 10, Wikimedia daily, daily evaluation, and weekly evaluation. Jobs use
-`max_instances=1` and coalescing to avoid overlapping instances. Manual approval remains required.
+The production Asia/Seoul schedule collects and processes intelligence every 15 minutes,
+generates at 07:35, and publishes at 08:00. Google Trends, Wikimedia, legacy collection/pipeline,
+and daily/weekly evaluation jobs are not registered in this mode. Jobs use `max_instances=1` and
+coalescing to avoid overlapping instances. Manual approval remains required.
 
 ## Operations
 

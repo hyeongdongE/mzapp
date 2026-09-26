@@ -47,3 +47,9 @@ def test_production_api_enables_proxy_headers_behind_loopback_binding() -> None:
     assert '"127.0.0.1:${INTERNAL_API_PORT:-8000}:8000"' in compose
     assert "--proxy-headers" in compose
     assert "--forwarded-allow-ips=*" in compose
+
+
+def test_production_scheduler_explicitly_uses_intelligence_only_mode() -> None:
+    compose = (ROOT / "compose.prod.yaml").read_text(encoding="utf-8")
+
+    assert "scripts/scheduler.py --mode intelligence-only" in compose
