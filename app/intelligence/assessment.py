@@ -31,6 +31,23 @@ IMPORTANCE_SIGNALS = {
     "release": 15.0,
     "released": 15.0,
     "security": 25.0,
+    # Korean headlines are common in GeekNews. These indicate potential impact,
+    # not factual corroboration; confidence remains a separate publication gate.
+    "보안": 25.0,
+    "취약점": 25.0,
+    "해킹": 25.0,
+    "장애": 25.0,
+    "서비스 중단": 25.0,
+    "침해": 25.0,
+    "인수": 20.0,
+    "철수": 25.0,
+    "개편": 15.0,
+    "책임 인정": 20.0,
+    "가격 인상": 15.0,
+    "요금 인상": 15.0,
+    "출시": 15.0,
+    "폐지": 20.0,
+    "지원 종료": 20.0,
 }
 
 

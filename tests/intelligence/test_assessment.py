@@ -75,6 +75,46 @@ def test_title_changes_do_not_change_confidence_components(db_session) -> None:
     assert left.importance != right.importance
 
 
+def test_korean_impact_headline_can_pass_importance_without_gaining_confidence(db_session) -> None:
+    event = seed_event(
+        db_session,
+        [EvidenceSpec(Source.GEEKNEWS, "대규모 서비스 장애 발생")],
+        suffix="korean-impact",
+    )
+
+    result = AssessmentService(db_session).assess(event.id, version="assessment-v2-ko")
+
+    assert result.importance >= 20
+    assert result.confidence is EvidenceConfidence.LOW
+    assert "장애" in result.importance_breakdown["matched_signals"]
+
+
+def test_korean_unrelated_headline_does_not_gain_importance(db_session) -> None:
+    event = seed_event(
+        db_session,
+        [EvidenceSpec(Source.GEEKNEWS, "예멘의 면적은 얼마일까")],
+        suffix="korean-unrelated",
+    )
+
+    result = AssessmentService(db_session).assess(event.id, version="assessment-v2-ko")
+
+    assert result.importance == 10
+    assert result.confidence is EvidenceConfidence.LOW
+
+
+def test_korean_product_exit_headline_is_important_but_not_verified(db_session) -> None:
+    event = seed_event(
+        db_session,
+        [EvidenceSpec(Source.GEEKNEWS, "Microsoft, Copilot 개편으로 챗봇 경쟁에서 철수")],
+        suffix="korean-product-exit",
+    )
+
+    result = AssessmentService(db_session).assess(event.id, version="assessment-v2-ko")
+
+    assert result.importance >= 20
+    assert result.confidence is EvidenceConfidence.LOW
+
+
 def test_syndication_and_ambiguity_reduce_confidence(db_session) -> None:
     duplicate_url = "https://vendor.example/one-event"
     syndicated = seed_event(

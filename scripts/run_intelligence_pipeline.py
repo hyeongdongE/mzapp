@@ -49,7 +49,7 @@ async def run(args: argparse.Namespace) -> None:
                     print(
                         f"collect source={result.source.value} "
                         f"status={'ok' if result.succeeded else 'failed'} "
-                        f"raw_items={result.raw_item_count} "
+                        f"new_db_items={result.raw_item_count} "
                         f"error={result.error_code or '-'}"
                     )
         if args.process:

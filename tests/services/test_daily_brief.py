@@ -152,6 +152,26 @@ def test_community_only_claim_is_not_published_as_fact(db_session) -> None:
     assert result.item_count == 0
 
 
+def test_korean_community_headline_alone_does_not_bypass_evidence_gate(db_session) -> None:
+    seed_health(db_session)
+    event = seed_event(
+        db_session,
+        [EvidenceSpec(Source.GEEKNEWS, "대규모 서비스 장애 발생")],
+        suffix="korean-unconfirmed",
+    )
+    FactBuilder(db_session).build(event.id)
+    assessment = AssessmentService(db_session).assess(
+        event.id, version="assessment-v2-ko"
+    )
+    assert assessment.importance >= 20
+
+    result = DailyBriefService(db_session).generate(
+        BRIEF_DATE, now=GENERATION_TIME, version="brief-v2-no-github"
+    )
+
+    assert result.item_count == 0
+
+
 def test_normal_brief_snapshots_exact_fact_and_evidence_pairs(db_session) -> None:
     seed_health(db_session)
     seed_qualifying_events(db_session, 4)
