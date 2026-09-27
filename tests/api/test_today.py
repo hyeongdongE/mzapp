@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from app.intelligence.sources import CURRENT_BRIEF_POLICY_VERSION
 from app.models.enums import BriefStatus, Source
-from app.models.tables import BriefItem, DailyBrief
+from app.models.tables import BriefItem, DailyBrief, RawItem
 from tests.intelligence.helpers import EvidenceSpec, seed_event
 
 BRIEF_DATE = date(2026, 9, 24)
@@ -61,7 +61,7 @@ def seed_brief(
             watch_text="관찰: 공식 후속 공지를 확인하세요.",
             source_links=[
                 {"title": "AWS", "url": "https://aws.amazon.com/blogs/aws/release"},
-                {"title": "GitHub", "url": "https://github.com/acme/tool/releases/2"},
+                {"title": "Cloudflare", "url": "https://blog.cloudflare.com/release"},
             ],
             importance=90.0,
         )
@@ -87,6 +87,11 @@ def test_today_returns_latest_public_brief_shape(client, api_session) -> None:
         "selectedCount": 1,
     }
     assert payload["items"][0]["sources"][0]["title"] == "AWS"
+    assert {source["title"] for source in payload["items"][0]["sources"]} == {
+        "AWS",
+        "Cloudflare",
+    }
+    assert "github.com" not in response.text.lower()
     assert "factIds" not in payload["items"][0]
     assert "evidenceIds" not in payload["items"][0]
 
@@ -130,3 +135,22 @@ def test_today_rejects_unapproved_current_policy_suffix(client, api_session) -> 
     )
 
     assert client.get("/api/public/today").status_code == 404
+
+
+def test_discovery_remains_available_without_a_published_brief(client, api_session) -> None:
+    seed_event(
+        api_session,
+        [EvidenceSpec(Source.GEEKNEWS, "새 GeekNews 글")],
+        suffix="api-discovery",
+    )
+    item = api_session.query(RawItem).filter_by(external_id="api-discovery:1").one()
+    item.url = "https://news.hada.io/topic?id=123"
+    api_session.commit()
+
+    assert client.get("/api/public/today").status_code == 404
+    response = client.get("/api/public/discovery?day=2026-09-23")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "UNVERIFIED_DISCOVERY"
+    assert [entry["title"] for entry in response.json()["items"]] == ["새 GeekNews 글"]
+    assert "whatHappened" not in response.text
