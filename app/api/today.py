@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -10,6 +11,7 @@ from app.api.public_dependencies import SessionDependency, enforce_same_origin
 from app.intelligence.sources import CURRENT_BRIEF_PUBLIC_VERSIONS
 from app.models.enums import BriefStatus
 from app.models.tables import BriefItem, DailyBrief
+from app.services.discovery import geeknews_discovery
 
 router = APIRouter(
     prefix="/api/public",
@@ -17,6 +19,15 @@ router = APIRouter(
     tags=["today"],
 )
 PUBLIC_STATUSES = (BriefStatus.PUBLISHED, BriefStatus.LOW_SIGNAL_DAY)
+SEOUL = ZoneInfo("Asia/Seoul")
+
+
+@router.get("/discovery")
+def discovery(session: SessionDependency, day: date | None = None) -> dict[str, object]:
+    now = datetime.now(UTC)
+    return geeknews_discovery(
+        session, day=day or now.astimezone(SEOUL).date(), now=now
+    )
 
 
 @router.get("/today")

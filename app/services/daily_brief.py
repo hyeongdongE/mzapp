@@ -345,7 +345,6 @@ class DailyBriefService:
                 .join(EventClusterItem, EventClusterItem.raw_item_id == RawItem.id)
                 .where(
                     EventClusterItem.event_cluster_id == event_id,
-                    RawItem.source.in_(self._enabled_sources),
                     RawItem.published_at >= window_start,
                     RawItem.source.in_(self._enabled_sources),
                     RawItem.published_at < window_end,
@@ -364,6 +363,7 @@ class DailyBriefService:
                 select(func.count())
                 .select_from(RawItem)
                 .where(
+                    RawItem.source.in_(self._enabled_sources),
                     RawItem.published_at >= window_start,
                     RawItem.published_at < window_end,
                     RawItem.collected_at <= now,

@@ -75,3 +75,13 @@ export interface TodayBrief {
   }
   items: DailyBriefItem[]
 }
+
+export interface DiscoveryFeed {
+  day: string
+  status: 'UNVERIFIED_DISCOVERY'
+  items: {
+    title: string
+    url: string
+    publishedAt: string
+  }[]
+}

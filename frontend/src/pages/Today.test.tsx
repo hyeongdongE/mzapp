@@ -20,18 +20,28 @@ const brief = {
   },
   items: [{
     position: 1,
-    headline: 'Claude Code v2.1.0 released',
+    headline: '주요 보안 업데이트가 공개됐습니다',
     category: 'DEVELOPER_TOOLS',
     whatHappened: '새 버전이 공개됐습니다.',
     whyItMatters: '개발 워크플로에 영향을 줄 수 있습니다.',
-    fact: ['버전: v2.1.0', '발행일: 2026-09-23'],
+    fact: ['보안 권고가 공개됐습니다', '발행일: 2026-09-23'],
     interpretation: '해석: 적용 범위를 확인해야 합니다.',
     watch: '관찰: 공식 후속 공지를 확인하세요.',
     sources: [
-      { title: 'GitHub', url: 'https://github.com/anthropics/claude-code/releases/2.1.0' },
-      { title: 'AWS', url: 'https://aws.amazon.com/blogs/aws/claude-code' },
+      { title: 'AWS', url: 'https://aws.amazon.com/blogs/aws/security-release' },
+      { title: 'Cloudflare', url: 'https://blog.cloudflare.com/security-release' },
     ],
     importance: 90,
+  }],
+}
+
+const discovery = {
+  day: '2026-09-24',
+  status: 'UNVERIFIED_DISCOVERY',
+  items: [{
+    title: 'GeekNews에 올라온 새 글',
+    url: 'https://news.hada.io/topic?id=123',
+    publishedAt: '2026-09-24T09:12:00+09:00',
   }],
 }
 
@@ -49,6 +59,7 @@ function installApi(todayResponse: Promise<Response> = response(brief)) {
     if (path.endsWith('/categories')) return response({ dataMode: 'LIVE', items: [] })
     if (path.endsWith('/me/interests')) return response({ categories: ['AI_TECH'] })
     if (path.endsWith('/today')) return todayResponse
+    if (path.endsWith('/discovery')) return response(discovery)
     throw new Error(`Unexpected request: ${path}`)
   })
 }
@@ -68,10 +79,11 @@ test('renders an evidence-grounded brief without save controls', async () => {
   expect(screen.getByText('WATCH')).toBeInTheDocument()
   expect(screen.getByText('약 5분 이내 · 4분 8초')).toBeInTheDocument()
   expect(screen.getByText('원문 42개 → 사건 9개 → 오늘 3개')).toBeInTheDocument()
-  expect(screen.getByRole('link', { name: 'GitHub 원문 열기' })).toHaveAttribute(
+  expect(screen.getByRole('link', { name: 'AWS 원문 열기' })).toHaveAttribute(
     'href',
-    'https://github.com/anthropics/claude-code/releases/2.1.0',
+    'https://aws.amazon.com/blogs/aws/security-release',
   )
+  expect(screen.queryByText(/GitHub/)).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /저장/ })).not.toBeInTheDocument()
 })
 
@@ -93,4 +105,10 @@ test('renders an unavailable state when no public brief exists', async () => {
   render(<App />)
 
   expect(await screen.findByText('오늘 브리프를 아직 공개하지 못했습니다')).toBeInTheDocument()
+  expect(await screen.findByRole('link', { name: 'GeekNews에 올라온 새 글' })).toHaveAttribute(
+    'href',
+    'https://news.hada.io/topic?id=123',
+  )
+  expect(screen.getByText(/사실 여부와 중요도는 아직 검증하지 않았으며/)).toBeInTheDocument()
+  expect(screen.queryByText('FACT')).not.toBeInTheDocument()
 })

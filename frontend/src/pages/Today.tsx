@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 
 import { api } from '../api'
 import BriefItem from '../components/BriefItem'
-import type { TodayBrief } from '../types'
+import DiscoverySection from '../components/DiscoverySection'
+import type { DiscoveryFeed, TodayBrief } from '../types'
 
 function duration(seconds: number) {
   const minutes = Math.floor(seconds / 60)
@@ -12,6 +13,7 @@ function duration(seconds: number) {
 
 export default function Today() {
   const [brief, setBrief] = useState<TodayBrief | null>(null)
+  const [discovery, setDiscovery] = useState<DiscoveryFeed | null>(null)
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
@@ -19,6 +21,9 @@ export default function Today() {
     void api.today()
       .then((result) => { if (active) setBrief(result) })
       .catch(() => { if (active) setFailed(true) })
+    void api.discovery()
+      .then((result) => { if (active) setDiscovery(result) })
+      .catch(() => { /* Discovery is optional; verified Brief remains available. */ })
     return () => { active = false }
   }, [])
 
@@ -29,6 +34,7 @@ export default function Today() {
         <h1>오늘 브리프를 아직 공개하지 못했습니다</h1>
         <p>근거와 source coverage 검증이 끝난 뒤 공개합니다.</p>
       </section>
+      <DiscoverySection feed={discovery} />
     </main>
   )
   if (!brief) return <main className="state-page" aria-live="polite"><span className="radar-dot" />오늘의 근거를 정리하고 있어요.</main>
@@ -52,6 +58,7 @@ export default function Today() {
       <section className="brief-list" aria-label="오늘의 브리프">
         {brief.items.map((item, index) => <BriefItem item={item} key={`${item.position}-${item.headline}`} lead={index === 0} />)}
       </section>
+      <DiscoverySection feed={discovery} />
     </main>
   )
 }
