@@ -11,6 +11,7 @@ from apscheduler.schedulers.base import BaseScheduler
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 from app.db import session_scope
+from app.intelligence.sources import CURRENT_BRIEF_POLICY_VERSION
 from app.services.intelligence_scheduler import (
     IntelligencePipeline,
     IntelligenceSchedulerActions,
@@ -100,7 +101,7 @@ def scheduled_actions(
             IntelligencePipeline(session, now=clock).generate(
                 brief_date,
                 now=current,
-                version="brief-v1",
+                version=CURRENT_BRIEF_POLICY_VERSION,
             )
 
     def publish_intelligence() -> None:
@@ -110,7 +111,7 @@ def scheduled_actions(
             IntelligencePipeline(session, now=clock).publish(
                 brief_date,
                 now=current,
-                recovery_version="brief-v1-publish",
+                recovery_version=f"{CURRENT_BRIEF_POLICY_VERSION}-publish",
             )
 
     return SchedulerActions(

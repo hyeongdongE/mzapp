@@ -9,6 +9,7 @@ import httpx
 from app.collectors.http import SafeHttpClient
 from app.config.settings import get_settings
 from app.db import session_scope
+from app.intelligence.sources import CURRENT_BRIEF_POLICY_VERSION
 from app.services.intelligence_scheduler import IntelligencePipeline
 from scripts.collect import build_collectors
 
@@ -32,7 +33,6 @@ async def run(args: argparse.Namespace) -> None:
                     allowed_hosts={
                         "news.hada.io",
                         "hacker-news.firebaseio.com",
-                        "api.github.com",
                         "blog.cloudflare.com",
                         "aws.amazon.com",
                     },
@@ -67,7 +67,11 @@ async def run(args: argparse.Namespace) -> None:
             brief = pipeline.generate(
                 args.brief_date,
                 now=now,
-                version="brief-v1-dry-run" if args.dry_run else "brief-v1",
+                version=(
+                    f"{CURRENT_BRIEF_POLICY_VERSION}-dry-run"
+                    if args.dry_run
+                    else CURRENT_BRIEF_POLICY_VERSION
+                ),
             )
             print(
                 f"brief status={brief.status.value} items={brief.item_count} "
