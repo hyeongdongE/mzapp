@@ -40,10 +40,17 @@ def test_all_collects_only_enabled_intelligence_sources() -> None:
     assert {collector.source for collector in collectors} == {
         Source.GEEKNEWS,
         Source.HACKER_NEWS,
-        Source.GITHUB_RELEASES,
         Source.OFFICIAL_CLOUDFLARE,
         Source.OFFICIAL_AWS,
     }
+    assert len(collectors) == 4
+
+
+def test_explicit_legacy_github_collection_remains_available() -> None:
+    collectors = build_collectors("github", object(), get_settings(), target_date=None)
+
+    assert collectors
+    assert {collector.source for collector in collectors} == {Source.GITHUB_RELEASES}
 
 
 def test_collect_cli_exits_nonzero_after_isolated_failure(monkeypatch) -> None:

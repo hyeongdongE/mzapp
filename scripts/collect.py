@@ -63,7 +63,7 @@ def build_collectors(
         collectors.append(
             HackerNewsCollector(safe_http, base_url=str(settings.hacker_news_api_url))
         )
-    if source in {"github", "all"}:
+    if source == "github":
         collectors.extend(
             GitHubReleasesCollector(
                 safe_http,

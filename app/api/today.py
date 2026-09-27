@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.public_dependencies import SessionDependency, enforce_same_origin
+from app.intelligence.sources import CURRENT_BRIEF_PUBLIC_VERSIONS
 from app.models.enums import BriefStatus
 from app.models.tables import BriefItem, DailyBrief
 
@@ -22,7 +23,10 @@ PUBLIC_STATUSES = (BriefStatus.PUBLISHED, BriefStatus.LOW_SIGNAL_DAY)
 def today(session: SessionDependency) -> dict:
     brief = session.scalar(
         select(DailyBrief)
-        .where(DailyBrief.status.in_(PUBLIC_STATUSES))
+        .where(
+            DailyBrief.status.in_(PUBLIC_STATUSES),
+            DailyBrief.generation_version.in_(CURRENT_BRIEF_PUBLIC_VERSIONS),
+        )
         .order_by(DailyBrief.brief_date.desc(), DailyBrief.version.desc())
         .limit(1)
     )

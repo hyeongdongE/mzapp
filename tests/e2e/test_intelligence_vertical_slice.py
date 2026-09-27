@@ -10,10 +10,10 @@ from sqlalchemy import func, select
 
 from app.api.today import today
 from app.collectors.geeknews import GeekNewsAtomCollector
-from app.collectors.github_releases import GitHubReleasesCollector
 from app.collectors.hacker_news import HackerNewsCollector
 from app.collectors.http import SafeHttpClient
 from app.collectors.official_feed import OfficialFeedCollector
+from app.intelligence.sources import CURRENT_BRIEF_POLICY_VERSION
 from app.models.enums import BriefStatus, Source
 from app.models.tables import (
     BriefItem,
@@ -77,11 +77,6 @@ async def test_recorded_http_payloads_cross_the_complete_today_path(db_session) 
     collectors = [
         GeekNewsAtomCollector(http, "https://news.hada.io/rss/news", now=lambda: AS_OF),
         HackerNewsCollector(http, max_items=2, now=lambda: AS_OF),
-        GitHubReleasesCollector(
-            http,
-            repository="acme/agent-sdk",
-            now=lambda: AS_OF,
-        ),
         OfficialFeedCollector(
             Source.OFFICIAL_CLOUDFLARE,
             http,
@@ -98,7 +93,6 @@ async def test_recorded_http_payloads_cross_the_complete_today_path(db_session) 
     pipeline = IntelligencePipeline(
         db_session,
         now=lambda: AS_OF,
-        github_repositories=("acme/agent-sdk",),
     )
 
     collection = await pipeline.collect(collectors, as_of=AS_OF)
@@ -111,7 +105,7 @@ async def test_recorded_http_payloads_cross_the_complete_today_path(db_session) 
     generated = pipeline.generate(
         date(2026, 9, 24),
         now=datetime(2026, 9, 24, 0, 0, tzinfo=UTC),
-        version="brief-e2e-v1",
+        version=CURRENT_BRIEF_POLICY_VERSION,
     )
     assert generated.status is BriefStatus.DRAFT
     brief = pipeline.publish(
@@ -124,13 +118,12 @@ async def test_recorded_http_payloads_cross_the_complete_today_path(db_session) 
     assert {result.source for result in collection} == {
         Source.GEEKNEWS,
         Source.HACKER_NEWS,
-        Source.GITHUB_RELEASES,
         Source.OFFICIAL_CLOUDFLARE,
         Source.OFFICIAL_AWS,
     }
     assert processing.assigned_items > 0
-    assert db_session.scalar(select(func.count()).select_from(RawFetch)) == 5
-    assert db_session.scalar(select(func.count()).select_from(RawItem)) >= 7
+    assert db_session.scalar(select(func.count()).select_from(RawFetch)) == 4
+    assert db_session.scalar(select(func.count()).select_from(RawItem)) >= 6
     assert db_session.scalar(select(func.count()).select_from(EventCluster)) > 0
     assert db_session.scalar(select(func.count()).select_from(EventEvidence)) > 0
     assert db_session.scalar(select(func.count()).select_from(EventFact)) > 0

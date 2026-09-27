@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 
+from app.intelligence.sources import CURRENT_BRIEF_POLICY_VERSION
 from app.models.enums import BriefStatus, Source
 from app.models.tables import BriefItem, DailyBrief
 from tests.intelligence.helpers import EvidenceSpec, seed_event
@@ -10,7 +11,12 @@ BRIEF_DATE = date(2026, 9, 24)
 NOW = datetime(2026, 9, 24, tzinfo=UTC)
 
 
-def seed_brief(api_session, status: BriefStatus = BriefStatus.PUBLISHED) -> DailyBrief:
+def seed_brief(
+    api_session,
+    status: BriefStatus = BriefStatus.PUBLISHED,
+    *,
+    generation_version: str | None = None,
+) -> DailyBrief:
     event = seed_event(
         api_session,
         [EvidenceSpec(Source.OFFICIAL_AWS, "Critical security release")],
@@ -35,7 +41,7 @@ def seed_brief(api_session, status: BriefStatus = BriefStatus.PUBLISHED) -> Dail
         selected_count=1,
         word_count=120,
         reading_time_seconds=75,
-        generation_version=f"api-{status.value}",
+        generation_version=generation_version or CURRENT_BRIEF_POLICY_VERSION,
         pipeline_version="intelligence-pipeline-v1",
     )
     api_session.add(brief)
@@ -106,3 +112,21 @@ def test_absent_or_non_public_brief_is_not_exposed(client, api_session) -> None:
 
     assert client.get("/api/public/today").status_code == 404
     assert client.get("/api/public/briefs/2026-09-24").status_code == 404
+
+
+def test_today_does_not_reuse_legacy_policy_brief(client, api_session) -> None:
+    seed_brief(api_session, generation_version="brief-v1")
+    api_session.commit()
+
+    assert client.get("/api/public/today").status_code == 404
+    # Explicit historical lookup remains available for audit, not as today's digest.
+    assert client.get("/api/public/briefs/2026-09-24").status_code == 200
+
+
+def test_today_rejects_unapproved_current_policy_suffix(client, api_session) -> None:
+    seed_brief(
+        api_session,
+        generation_version=f"{CURRENT_BRIEF_POLICY_VERSION}-dry-run",
+    )
+
+    assert client.get("/api/public/today").status_code == 404

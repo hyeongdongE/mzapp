@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.config.settings import get_settings
 from app.intelligence.briefs import BriefCandidate, BriefSelector
 from app.intelligence.reading_time import ReadingTimeEstimator
-from app.intelligence.sources import required_source_health_keys
+from app.intelligence.sources import required_source_health_keys, required_source_keys
 from app.intelligence.synthesis import BriefDraftContent, EvidenceOnlySynthesizer
 from app.models.enums import BriefStatus, ClusterStatus, EvidenceConfidence
 from app.models.tables import (
@@ -58,6 +58,7 @@ class DailyBriefService:
         self._estimator = ReadingTimeEstimator()
         self._selector = BriefSelector(self._estimator)
         self._synthesizer = EvidenceOnlySynthesizer(session)
+        self._enabled_sources = required_source_keys()
 
     def generate(
         self,
@@ -292,6 +293,7 @@ class DailyBriefService:
                 not in {EvidenceConfidence.SUPPORTED, EvidenceConfidence.STRONG}
                 or assessment.importance < MIN_IMPORTANCE
                 or not self._has_window_item(event_id, window_start, window_end, now)
+                or self._has_disabled_source_evidence(event_id)
             ):
                 continue
             try:
@@ -314,6 +316,22 @@ class DailyBriefService:
             drafts[event_id] = draft
         return candidates, drafts
 
+    def _has_disabled_source_evidence(self, event_id: int) -> bool:
+        # Historical records remain immutable, but a new brief must not cite a
+        # source removed from the active publication policy, even in a mixed cluster.
+        return (
+            self._session.scalar(
+                select(EventEvidence.id)
+                .join(RawItem, RawItem.id == EventEvidence.raw_item_id)
+                .where(
+                    EventEvidence.event_cluster_id == event_id,
+                    RawItem.source.not_in(self._enabled_sources),
+                )
+                .limit(1)
+            )
+            is not None
+        )
+
     def _has_window_item(
         self,
         event_id: int,
@@ -327,7 +345,9 @@ class DailyBriefService:
                 .join(EventClusterItem, EventClusterItem.raw_item_id == RawItem.id)
                 .where(
                     EventClusterItem.event_cluster_id == event_id,
+                    RawItem.source.in_(self._enabled_sources),
                     RawItem.published_at >= window_start,
+                    RawItem.source.in_(self._enabled_sources),
                     RawItem.published_at < window_end,
                     RawItem.collected_at <= now,
                 )

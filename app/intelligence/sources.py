@@ -28,6 +28,11 @@ class SourceDefinition:
 
 
 PUBLIC_METADATA_ONLY = SourcePolicy(store_full_content=False)
+CURRENT_BRIEF_POLICY_VERSION = "brief-v2-no-github"
+CURRENT_BRIEF_PUBLIC_VERSIONS = (
+    CURRENT_BRIEF_POLICY_VERSION,
+    f"{CURRENT_BRIEF_POLICY_VERSION}-publish",
+)
 
 SOURCE_REGISTRY: dict[Source, SourceDefinition] = {
     Source.GEEKNEWS: SourceDefinition(
@@ -56,7 +61,7 @@ SOURCE_REGISTRY: dict[Source, SourceDefinition] = {
         source_type=SourceType.DEVELOPER,
         collection_method="API",
         authority_level=4,
-        enabled=True,
+        enabled=False,
         policy=PUBLIC_METADATA_ONLY,
         expected_freshness=timedelta(hours=1),
     ),

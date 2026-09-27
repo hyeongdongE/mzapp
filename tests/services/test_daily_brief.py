@@ -50,16 +50,12 @@ def seed_qualifying_events(db_session, count: int, *, start: int = 1) -> list[in
             db_session,
             [
                 EvidenceSpec(
-                    Source.GITHUB_RELEASES,
-                    f"Critical security release {index}.0",
-                    metadata={
-                        "repository": f"acme/tool-{index}",
-                        "release_tag": f"v{index}.0",
-                    },
+                    Source.OFFICIAL_CLOUDFLARE,
+                    f"Critical security launch {index}.0",
                 ),
                 EvidenceSpec(
                     Source.OFFICIAL_AWS,
-                    f"Critical security release {index}.0 support",
+                    f"Critical security launch {index}.0 support",
                 ),
             ],
             suffix=f"brief-event-{index}",
@@ -98,6 +94,61 @@ def test_stale_required_source_blocks_publication(db_session) -> None:
 
     assert result.status is BriefStatus.DEGRADED_SOURCE_COVERAGE
     assert result.published_at is None
+    assert result.item_count == 0
+
+
+def test_disabled_github_only_event_cannot_enter_new_brief(db_session) -> None:
+    seed_health(db_session)
+    event = seed_event(
+        db_session,
+        [EvidenceSpec(Source.GITHUB_RELEASES, "Critical security release")],
+        suffix="disabled-github-only",
+    )
+    FactBuilder(db_session).build(event.id)
+    AssessmentService(db_session).assess(event.id, version="assessment-v1")
+
+    result = DailyBriefService(db_session).generate(
+        BRIEF_DATE, now=GENERATION_TIME, version="brief-v2-no-github"
+    )
+
+    assert result.item_count == 0
+    assert db_session.scalar(select(func.count()).select_from(BriefItem)) == 0
+
+
+def test_mixed_historical_github_cluster_is_excluded_fail_closed(db_session) -> None:
+    seed_health(db_session)
+    event = seed_event(
+        db_session,
+        [
+            EvidenceSpec(Source.GITHUB_RELEASES, "Critical security launch"),
+            EvidenceSpec(Source.OFFICIAL_AWS, "Critical security launch"),
+        ],
+        suffix="disabled-github-mixed",
+    )
+    FactBuilder(db_session).build(event.id)
+    AssessmentService(db_session).assess(event.id, version="assessment-v1")
+
+    result = DailyBriefService(db_session).generate(
+        BRIEF_DATE, now=GENERATION_TIME, version="brief-v2-no-github"
+    )
+
+    assert result.item_count == 0
+
+
+def test_community_only_claim_is_not_published_as_fact(db_session) -> None:
+    seed_health(db_session)
+    event = seed_event(
+        db_session,
+        [EvidenceSpec(Source.HACKER_NEWS, "Critical security launch rumor")],
+        suffix="community-only-rumor",
+    )
+    FactBuilder(db_session).build(event.id)
+    AssessmentService(db_session).assess(event.id, version="assessment-v1")
+
+    result = DailyBriefService(db_session).generate(
+        BRIEF_DATE, now=GENERATION_TIME, version="brief-v2-no-github"
+    )
+
     assert result.item_count == 0
 
 
