@@ -109,6 +109,7 @@ test('renders an unavailable state when no public brief exists', async () => {
     'href',
     'https://news.hada.io/topic?id=123',
   )
-  expect(screen.getByText(/사실 여부와 중요도는 아직 검증하지 않았으며/)).toBeInTheDocument()
+  expect(screen.getByRole('region', { name: '긱뉴스 새 글' })).toBeInTheDocument()
+  expect(screen.queryByText(/확인 전 소식|사실 여부와 중요도는 아직 검증하지 않았으며/)).not.toBeInTheDocument()
   expect(screen.queryByText('FACT')).not.toBeInTheDocument()
 })
